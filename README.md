@@ -5,6 +5,12 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/excludarr)
 ![Docker Pulls](https://img.shields.io/docker/pulls/haijeploeg/excludarr)
 
+> ⚠️ **Note:** Excludarr is no longer being maintained.  
+> 
+> The codebase became difficult to maintain and adding new features was cumbersome. For a more modern and maintainable solution, check out [Prunarr](https://github.com/haijeploeg/Prunarr).  
+> 
+> Prunarr is a complete rewrite with a **modular design**, **caching for faster performance**, and built-in **Tautulli integration** to intelligently prune your library. It’s actively developed, and future updates will include **Docker** and **Kubernetes** support.
+
 # Excludarr
 
 Excludarr is a CLI that interacts with Radarr and Sonarr instances. It completely manages you library in Sonarr and Radarr to only consist out of movies and series that are not present on any of the configured streaming providers. Excludarr can also re monitor movies and series if it is not available anymore on any of the configured streaming providers. You can also configure to delete the already downloaded files of the excluded entry to keep your storage happy! 🎉

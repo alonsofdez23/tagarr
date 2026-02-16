@@ -1,331 +1,304 @@
-![License](https://img.shields.io/github/license/haijeploeg/excludarr)
-[![release](https://github.com/haijeploeg/excludarr/actions/workflows/release.yml/badge.svg)](https://github.com/haijeploeg/excludarr/actions/workflows/release.yml)
-[![Docker](https://github.com/haijeploeg/excludarr/actions/workflows/docker.yml/badge.svg)](https://github.com/haijeploeg/excludarr/actions/workflows/docker.yml)
-[![PyPI version](https://badge.fury.io/py/excludarr.svg)](https://badge.fury.io/py/excludarr)
-![PyPI - Downloads](https://img.shields.io/pypi/dm/excludarr)
-![Docker Pulls](https://img.shields.io/docker/pulls/haijeploeg/excludarr)
+# Tagarr
 
-> ⚠️ **Note:** Excludarr is no longer being maintained.  
-> 
-> The codebase became difficult to maintain and adding new features was cumbersome. For a more modern and maintainable solution, check out [Prunarr](https://github.com/haijeploeg/Prunarr).  
-> 
-> Prunarr is a complete rewrite with a **modular design**, **caching for faster performance**, and built-in **Tautulli integration** to intelligently prune your library. It’s actively developed, and future updates will include **Docker** and **Kubernetes** support.
+Tagarr es una herramienta CLI que interactúa con instancias de Radarr y Sonarr. Detecta películas y series disponibles en los proveedores de streaming configurados (a través de JustWatch) y **añade etiquetas** en Radarr/Sonarr con el nombre del proveedor (p. ej. `netflix`, `amazon prime video`, `disney plus`). También puede **limpiar etiquetas obsoletas** cuando el contenido ya no está disponible en un proveedor.
 
-# Excludarr
+> Basado en [Excludarr](https://github.com/haijeploeg/excludarr) de Haije Ploeg. En lugar de eliminar o deshabilitar el seguimiento, Tagarr se centra en etiquetar tu biblioteca con información de proveedores de streaming.
 
-Excludarr is a CLI that interacts with Radarr and Sonarr instances. It completely manages you library in Sonarr and Radarr to only consist out of movies and series that are not present on any of the configured streaming providers. Excludarr can also re monitor movies and series if it is not available anymore on any of the configured streaming providers. You can also configure to delete the already downloaded files of the excluded entry to keep your storage happy! 🎉
+## Cómo funciona
 
-[![asciicast](https://asciinema.org/a/459503.svg)](https://asciinema.org/a/459503?autoplay=1)
+1. Tagarr consulta JustWatch para averiguar qué proveedores de streaming configurados ofrecen cada película/serie.
+2. Para cada coincidencia, crea una etiqueta en Radarr/Sonarr con el nombre del proveedor en **minúsculas** (p. ej. `netflix`, `disney plus`).
+3. Las etiquetas se añaden al objeto de la película/serie para que puedas filtrar tu biblioteca por proveedor de streaming en la interfaz de Radarr/Sonarr.
+4. El comando `clean` elimina las etiquetas de los títulos que **ya no están disponibles** en un proveedor.
 
-## Prerequisites
+## Requisitos previos
 
-- Python 3.6 or Docker
-- If you have Sonarr: Sonarr V3 (version 2 is not working!)
-- If you have Radarr: Radarr V3
+- Python 3.6+ o Docker
+- Sonarr V3+ (V2 no está soportado)
+- Radarr V3+
 
-## Installation
-
-Installation of excludarr can be done using pip.
+## Instalación
 
 ```bash
-pip install excludarr
+pip install tagarr
 ```
 
-## Configuration
-
-To configure the application make sure that one of the following files exists:
+O instalar en modo desarrollo:
 
 ```bash
-/etc/excludarr/excludarr.yml
-~/.config/excludarr/excludarr.yml
-~/.excludarr/config/excludarr.yml
-~/.excludarr.yml
-./.excludarr.yml
+git clone <repo-url>
+cd tagarr
+pip install -e .
 ```
 
-The application will read those configuration files in that order. So `./.excludarr.yml` will overwrite `/etc/excludarr/excludarr.yml`. For a full list of options and their description see [excludarr-example.yml](.examples/excludarr-example.yml) in this repository.
+## Configuración
 
-> NOTE: To get a full list of available providers in your country, execute `excludarr providers list` and copy the full name of the provider in your configuration.
+Crea un archivo de configuración en una de las siguientes ubicaciones (en orden de prioridad, el último tiene preferencia):
 
-## Radarr
+```
+/etc/tagarr/tagarr.yml
+~/.config/tagarr/tagarr.yml
+~/.tagarr/config/tagarr.yml
+~/.tagarr.yml
+./.tagarr.yml
+```
 
-The `radarr` subcommands manages the library in your configured Radarr instance. Check `excludarr radarr --help` for a full list of options.
+### Ejemplo de configuración
 
-### Exclude
+```yaml
+general:
+  fast_search: true
+  locale: es_ES
+  providers:
+    - Netflix
+    - Amazon Prime Video
+    - Disney Plus
 
-To delete or disable monitoring of the movies in Radarr you can execute the `excludarr radarr exclude` command. You can determine to either delete the movie or change the status to not monitored. You can alo configure if you want to delete the associated files and to add an import exclusion to prevent future importing of the movie.
+# Opcional: TMDB como alternativa para series no encontradas por IMDB ID
+tmdb:
+  api_key: YOUR_TMDB_API_KEY
 
-By default no files are being deleted, you have to set the `-d` flag. To make the command non-interactive you can pass the `-y` flag to auto accept the confirmation question. To show the progress of the process you can pass the `--progress` flag to get a nice progress bar! Read the help page of the command carefully to adjust the command to your needs.
+radarr:
+  url: 'http://localhost:7878'
+  api_key: YOUR_RADARR_API_KEY
+  verify_ssl: false
+  # Opcional: títulos a omitir durante el etiquetado/limpieza
+  exclude:
+    # - 'Alguna Película'
+
+sonarr:
+  url: 'http://localhost:8989'
+  api_key: YOUR_SONARR_API_KEY
+  verify_ssl: false
+  exclude:
+    # - 'Alguna Serie'
+```
+
+> Para obtener la lista completa de proveedores disponibles en tu país, ejecuta `tagarr providers list`.
+
+## Uso
+
+### Proveedores
+
+Lista todos los proveedores de streaming disponibles para tu localización:
 
 ```bash
-$ excludarr radarr exclude -a delete -d -e
-              ╷                                            ╷                ╷
- Release Date │ Title                                      │ Used Diskspace │ Streaming Providers
-╶─────────────┼────────────────────────────────────────────┼────────────────┼─────────────────────────────────╴
- 2021-11-04   │ Red Notice                                 │ 0.00GB         │ Netflix
- 2021-10-13   │ The Last Duel                              │ 0.00GB         │ Apple iTunes
- 2021-11-04   │ Amina                                      │ 0.00GB         │ Netflix
- 2021-11-25   │ Apex                                       │ 12.00GB        │ Apple iTunes
- 2021-11-25   │ A Boy Called Christmas                     │ 0.00GB         │ Netflix
- 2012-06-27   │ The Amazing Spider-Man                     │ 0.00GB         │ Netflix, Apple iTunes
- 2017-07-05   │ Spider-Man: Homecoming                     │ 7.50GB         │ Apple iTunes
- 2021-10-22   │ The Harder They Fall                       │ 0.00GB         │ Netflix
- 2021-12-02   │ Single All the Way                         │ 0.00GB         │ Netflix
- 2021-05-19   │ F9                                         │ 0.00GB         │ Apple iTunes
- 2021-07-28   │ The Suicide Squad                          │ 10.00GB        │ Apple iTunes
- 2021-10-29   │ Army of Thieves                            │ 0.00GB         │ Netflix
- 2021-08-09   │ PAW Patrol: The Movie                      │ 0.00GB         │ Apple iTunes
- 2018-12-06   │ Spider-Man: Into the Spider-Verse          │ 20.00GB        │ Apple iTunes
- 2002-05-01   │ Spider-Man                                 │ 0.00GB         │ Netflix, Apple iTunes
-╶─────────────┼────────────────────────────────────────────┼────────────────┼─────────────────────────────────╴
-              │                       Total Used Diskspace │ 49.50GB        │
-              ╵                                            ╵                ╵
-Are you sure you want to delete the listed movies? [y/n] (n): y
-Succesfully deleted the movies from Radarr!
+tagarr providers list
+tagarr providers list -l en_US
 ```
 
-> NOTE: If you want to exclude any of the movies listed in the table, just copy the title and paste it in your configuration file under `radarr -> excludes`.
+### Radarr
 
-### Re-add
+#### Etiquetar películas
 
-To re enable monitoring of not-monitored movies in Radarr that are not present anymore on any of the streaming providers, you can execute `excludarr radarr re-add`. This will lookup all movies that are not monitored anymore in Radarr and check if they are still available on the configured streaming providers. If there is no match, the status of the movie will change to monitored. This is handy if you remove a streaming provider from the configuration, or if the movie is being deleted from a streaming provider.
+Detecta películas disponibles en los proveedores de streaming configurados y añade etiquetas en Radarr:
 
 ```bash
-$ excludarr radarr re-add
-              ╷
- Release Date │ Title
-╶─────────────┼───────────────────────────────────────────╴
- 2021-08-27   │ Vacation Friends
- 2021-10-13   │ The Last Duel
- 2021-09-01   │ Shang-Chi and the Legend of the Ten Rings
- 2021-06-17   │ Luca
- 2019-06-28   │ Spider-Man: Far From Home
- 2021-11-12   │ Home Sweet Home Alone
- 2021-07-07   │ Black Widow
- 2021-07-22   │ Snake Eyes: G.I. Joe Origins
- 2021-07-28   │ Jungle Cruise
- 2020-08-04   │ Deathstroke: Knights & Dragons - The Movie
- 2021-05-19   │ F9
- 2021-07-28   │ The Suicide Squad
- 2021-08-09   │ PAW Patrol: The Movie
- 2021-09-03   │ Zone 414
- 2021-05-26   │ Cruella
- 2021-07-15   │ Space Jam: A New Legacy
- 2021-03-24   │ Godzilla vs. Kong
-              ╵
-Are you sure you want to re monitor the listed movies? [y/n] (n): y
-Succesfully changed the status of the movies listed in Radarr to monitored!
+tagarr radarr tag --progress
 ```
 
-> NOTE: If you want to exclude any of the movies listed in the table, just copy the title and paste it in your configuration file under `radarr -> excludes`.
+Ejemplo de salida:
 
-## Sonarr
+```
+       ╷
+ Title │ Providers Tagged
+╶──────┼──────────────────────────────╴
+ Red Notice          │ netflix
+ The Last Duel       │ apple itunes
+ The Amazing Spider-Man │ netflix, apple itunes
+ Spider-Man: Homecoming │ apple itunes
+       ╵
 
-The `sonarr` subcommands manages the library in your configured Sonarr instance. Check `excludarr sonarr --help` for a full list of options.
+Successfully tagged 4 movies in Radarr!
+```
 
-### Exclude
+Después de ejecutar este comando, puedes ir a Radarr y filtrar tu biblioteca por etiquetas como `netflix`, `disney plus`, etc.
 
-To delete or disable monitoring of the series in Sonarr you can execute the `excludarr sonarr exclude` command. You can determine to either delete the serie or change the status to not monitored. You can alo configure if you want to delete the associated files. Excludarr will exclude the whole serie, the season(s) or individually episodes.
+#### Limpiar etiquetas obsoletas
 
-If you use the delete action (`excludarr sonarr exclude -a delete`) it will only delete the serie if the serie is ended and all seasons are streaming on a configured streaming service. A few examples with Netflix as a streaming provider.
-
-- **Serie A** has a total of 5 seasons and has ended. If all 5 seasons are found on Netflix it will delete the serie from Sonarr.
-- **Serie B** has a total of 4 seasons and it still continueing (season 5 will be released next year). If all 4 seasons are found on Netflix it will disable the monitoring of all 4 seasons, but it will **not** delete the whole serie from Sonarr.
-- **Serie C** has a total of 6 seasons and has ended. If only 5 seasons are found on Netflix, Excludarr will disable monitoring of the 5 seasons and will **not** delete the serie from Sonarr.
-
-By default no files are being deleted, you have to set the `-d` flag. To make the command non-interactive you can pass the `-y` flag to auto accept the confirmation question. To show the progress of the process you can pass the `--progress` flag to get a nice progress bar! Read the help page of the command carefully to adjust the command to your needs.
+Elimina las etiquetas de proveedores de streaming de películas que ya no están disponibles en esos proveedores:
 
 ```bash
-excludarr sonarr exclude -a delete -d
-              ╷                                             ╷                ╷                                             ╷                                             ╷                    ╷
- Release Year │ Title                                       │ Used Diskspace │ Seasons                                     │ Episodes                                    │ Providers          │ Ended
-╶─────────────┼─────────────────────────────────────────────┼────────────────┼─────────────────────────────────────────────┼─────────────────────────────────────────────┼────────────────────┼──────╴
- 2008         │ Breaking Bad                                │ 454.00GB       │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ Yes
-              │                                             │                │ Season 5                                    │                                             │                    │
- 2010         │ The Walking Dead                            │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ No
-              │                                             │                │ Season 5, Season 6, Season 7, Season 8,     │                                             │                    │
-              │                                             │                │ Season 9, Season 10                         │                                             │                    │
- 2016         │ Stranger Things                             │ 0.00GB         │ Season 1, Season 2, Season 3                │                                             │ Netflix            │ No
- 2012         │ Arrow                                       │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ Yes
-              │                                             │                │ Season 5, Season 6, Season 7, Season 8      │                                             │                    │
- 2004         │ Lost                                        │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Videoland          │ Yes
-              │                                             │                │ Season 5, Season 6                          │                                             │                    │
- 2013         │ House of Cards (US)                         │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ Yes
-              │                                             │                │ Season 5, Season 6                          │                                             │                    │
- 2011         │ Suits                                       │ 30.00GB        │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ Yes
-              │                                             │                │ Season 5, Season 6, Season 7, Season 8,     │                                             │                    │
-              │                                             │                │ Season 9                                    │                                             │                    │
- 2013         │ Vikings                                     │ 100.00GB       │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ Yes
-              │                                             │                │ Season 5, Season 6                          │                                             │                    │
- 2014         │ The Flash (2014)                            │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │ S08E01, S08E02, S08E03, S08E04, S08E05      │ Netflix            │ No
-              │                                             │                │ Season 5, Season 6, Season 7                │                                             │                    │
- 2013         │ Orange Is the New Black                     │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ Yes
-              │                                             │                │ Season 5, Season 6, Season 7                │                                             │                    │
- 2011         │ Black Mirror                                │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ Yes
-              │                                             │                │ Season 5                                    │                                             │                    │
- 2013         │ Rick and Morty                              │ 0.00GB         │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix            │ No
-              │                                             │                │ Season 5                                    │                                             │                    │
- 2005         │ The Office (US)                             │ 15.00GB        │ Season 1, Season 2, Season 3, Season 4,     │                                             │ Netflix, Videoland │ Yes
-              │                                             │                │ Season 5, Season 6, Season 7, Season 8,     │                                             │                    │
-              │                                             │                │ Season 9                                    │                                             │                    │
- 2010         │ Spartacus                                   │ 30.00GB        │ Season 1, Season 3                          │ S02E01, S02E02, S02E03, S02E04, S02E05,     │ Netflix            │ Yes
-              │                                             │                │                                             │ S02E06                                      │                    │
- 2017         │ Dark                                        │ 0.00GB         │ Season 1, Season 2, Season 3                │                                             │ Netflix            │ Yes
-╶─────────────┼─────────────────────────────────────────────┼────────────────┼─────────────────────────────────────────────┼─────────────────────────────────────────────┼────────────────────┼──────╴
-              │                        Total Used Diskspace │ 629.00GB       │                                             │                                             │                    │
-              ╵                                             ╵                ╵                                             ╵                                             ╵                    ╵
-Are you sure you want to delete the listed series? [y/n] (n): y
-Succesfully deleted the series and/or changed the status of serveral seasons and episodes listed in Sonarr to not monitored!
+tagarr radarr clean --progress
 ```
 
-> NOTE: If you want to exclude any of the series listed in the table, just copy the title and paste it in your configuration file under `sonarr -> excludes`.
+Ejemplo de salida:
 
-### Re-add
+```
+       ╷
+ Title │ Tags Removed
+╶──────┼──────────────────╴
+ F9    │ apple itunes
+       ╵
 
-To re enable monitoring of not-monitored series in Sonarr that are not present anymore on any of the streaming providers, you can execute `excludarr sonarr re-add`. This will lookup all series/seasons/episodes that are not monitored anymore in Sonarr and check if they are still available on the configured streaming providers. If there is no match, the status of the serie will change to monitored. This is handy if you remove a streaming provider from the configuration, or if the movie is being deleted from a streaming provider.
+Successfully cleaned tags from 1 movies in Radarr!
+```
+
+### Sonarr
+
+#### Etiquetar series
+
+Detecta series disponibles en los proveedores de streaming configurados y añade etiquetas en Sonarr. Las etiquetas se aplican a nivel de **serie**, agregando todos los proveedores encontrados en todos los episodios:
 
 ```bash
-excludarr sonarr re-add
-              ╷                                                  ╷                                                             ╷                                                              ╷
- Release Year │ Title                                            │ Seasons                                                     │ Episodes                                                     │ Ended
-╶─────────────┼──────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────┼──────╴
- 2010         │ The Walking Dead                                 │ Season 1, Season 2, Season 3, Season 4, Season 5, Season 6, │                                                              │ No
-              │                                                  │ Season 7, Season 8, Season 9, Season 10                     │                                                              │
- 2016         │ Stranger Things                                  │ Season 1, Season 2, Season 3                                │                                                              │ No
-              │                                                  │ Season 7, Season 8                                          │                                                              │
- 2004         │ Lost                                             │ Season 1, Season 2, Season 3, Season 4, Season 5, Season 6  │                                                              │ Yes
- 2011         │ Suits                                            │ Season 1, Season 2, Season 3, Season 4, Season 5, Season 6, │                                                              │ Yes
-              │                                                  │ Season 7, Season 8, Season 9                                │                                                              │
- 2014         │ The Flash (2014)                                 │ Season 1, Season 2, Season 3, Season 4, Season 5, Season 6, │ S08E01, S08E02, S08E03, S08E04, S08E05                       │ No
-              │                                                  │ Season 7                                                    │                                                              │
- 2013         │ Orange Is the New Black                          │ Season 1, Season 2, Season 3, Season 4, Season 5, Season 6, │                                                              │ Yes
-              │                                                  │ Season 7                                                    │                                                              │
- 2013         │ Rick and Morty                                   │ Season 1, Season 2, Season 3, Season 4, Season 5            │                                                              │ No
- 2005         │ The Office (US)                                  │ Season 1, Season 2, Season 3, Season 4, Season 5, Season 6, │                                                              │ Yes
-              │                                                  │ Season 7, Season 8, Season 9                                │                                                              │
- 1997         │ South Park                                       │ Season 1, Season 2, Season 18, Season 19, Season 20, Season │                                                              │ No
-              │                                                  │ 21                                                          │                                                              │
- 2013         │ The Blacklist                                    │ Season 1, Season 2, Season 3, Season 4, Season 5, Season 6, │ S09E01, S09E02, S09E03                                       │ No
-              │                                                  │ Season 7, Season 8                                          │                                                              │
- 2015         │ Better Call Saul                                 │ Season 1, Season 2, Season 3, Season 4, Season 5            │                                                              │ No
- 2014         │ Gotham                                           │ Season 1, Season 2, Season 4, Season 5                      │ S03E01, S03E02, S03E03, S03E04, S03E05, S03E06, S03E07,      │ Yes
-              │                                                  │                                                             │ S03E08, S03E09, S03E10, S03E11, S03E12, S03E13, S03E14,      │
-              │                                                  │                                                             │ S03E15, S03E16, S03E17, S03E18, S03E19, S03E20, S03E21       │
- 2005         │ Avatar: The Last Airbender                       │ Season 1, Season 2, Season 3                                │                                                              │ Yes
- 2014         │ Fargo                                            │ Season 1, Season 2, Season 3, Season 4                      │                                                              │ No
-              ╵                                                  ╵                                                             ╵                                                              ╵
-Are you sure you want to re monitor the listed series? [y/n] (n): y
-Succesfully changed the status of the series listed in Sonarr to monitored!
+tagarr sonarr tag --progress
 ```
 
-> NOTE: If you want to exclude any of the series listed in the table, just copy the title and paste it in your configuration file under `sonarr -> excludes`.
+Ejemplo de salida:
+
+```
+       ╷
+ Title │ Providers Tagged
+╶──────┼──────────────────────╴
+ Breaking Bad        │ netflix
+ Stranger Things     │ netflix
+ The Office (US)     │ netflix
+       ╵
+
+Successfully tagged 3 series in Sonarr!
+```
+
+#### Limpiar etiquetas obsoletas
+
+Elimina las etiquetas de proveedores de streaming de series que ya no están disponibles en esos proveedores:
+
+```bash
+tagarr sonarr clean --progress
+```
+
+### Opciones CLI
+
+Todos los comandos `tag` y `clean` soportan estas opciones:
+
+Opción | Corto | Descripción
+--- | --- | ---
+`--provider` | `-p` | Sobrescribe los proveedores de streaming configurados (se puede especificar varias veces)
+`--locale` | `-l` | Sobrescribe la localización configurada (p. ej. `en_US`, `es_ES`)
+`--progress` | | Muestra una barra de progreso durante el procesamiento
+
+Opciones globales:
+
+Opción | Descripción
+--- | ---
+`--debug` | Activa el registro de depuración
+`--version` | Muestra la versión y sale
+
+### Ejemplos
+
+```bash
+# Etiquetar películas con barra de progreso
+tagarr radarr tag --progress
+
+# Etiquetar series usando proveedores específicos
+tagarr sonarr tag -p Netflix -p "Disney Plus" --progress
+
+# Limpiar etiquetas obsoletas con una localización diferente
+tagarr radarr clean -l en_US --progress
+
+# Modo depuración
+tagarr --debug radarr tag --progress
+```
 
 ## Docker
 
-To use this setup using Docker, you can use the `haijeploeg/excludarr` container. You can use the following environment variables:
+Puedes usar las siguientes variables de entorno:
 
-Variable | Default | Description
+Variable | Por defecto | Descripción
 --- | --- | ---
-GENERAL_FAST_SEARCH | true | Enable or disable fast search, can be `true` or `false`.
-GENERAL_LOCALE | en_US | The locale to use, can also be a two letter country code.
-GENERAL_PROVIDERS | Netflix | Comma seperated list of providers. e.g. `GENERAL_PROVIDERS=netflix, amazon prime video`.
-TMDB_API_KEY | - | Your TMDB API key. This setting is optional and only used in fallback scenario's.
-RADARR_URL | http://localhost:7878 | The Radarr URL.
-RADARR_API_KEY | secret | Your Radarr API Key.
-RADARR_VERIFY_SSL | false | To enable SSL verify, can be `true` or `false`.
-RADARR_EXCLUDE | - | Comma seperated list of movies to exclude in the process of Excludarr, e.g. `RADARR_EXCLUDE=The Matrix, F9`.
-SONARR_URL | http://localhost:8989 | The Sonarr URL.
-SONARR_API_KEY | secret | Your Sonarr API Key.
-SONARR_VERIFY_SSL | false | To enable SSL verify, can be `true` or `false`.
-SONARR_EXCLUDE | - | Comma seperated list of series to exclude in Excludarr, e.g. `SONARR_EXCLUDE=Breaking Bad, Game of Thrones`.
-CRON_MODE | false | Wether to run the docker container using cron. This is useful for docker-compose.
+GENERAL_FAST_SEARCH | true | Activa o desactiva la búsqueda rápida, puede ser `true` o `false`
+GENERAL_LOCALE | en_US | La localización a usar, también puede ser un código de país de dos letras
+GENERAL_PROVIDERS | netflix | Lista de proveedores separados por comas, p. ej. `netflix, amazon prime video`
+TMDB_API_KEY | - | Tu clave API de TMDB (opcional, se usa como alternativa para buscar series)
+RADARR_URL | http://localhost:7878 | La URL de Radarr
+RADARR_API_KEY | secret | Tu clave API de Radarr
+RADARR_VERIFY_SSL | false | Activa la verificación SSL
+RADARR_EXCLUDE | - | Lista de títulos de películas a omitir, separados por comas
+SONARR_URL | http://localhost:8989 | La URL de Sonarr
+SONARR_API_KEY | secret | Tu clave API de Sonarr
+SONARR_VERIFY_SSL | false | Activa la verificación SSL
+SONARR_EXCLUDE | - | Lista de títulos de series a omitir, separados por comas
+CRON_MODE | false | Ejecuta el contenedor en modo cron
 
-You can put those variables in a env file (e.g. `excludarr.env`) and use it in a command (recommended way). Look the [docker_example.env](.examples/docker_example.env) for an example. If you have set your variables properly, you can execute excludarr in docker by just adding the command and paramaters at the end of the docker command. Example:
+### Docker run
 
 ```bash
-docker run -it --rm --env-file excludarr.env haijeploeg/excludarr:latest radarr exclude -a delete -d -e --progress
-docker run -it --rm --env-file excludarr.env haijeploeg/excludarr:latest sonarr exclude -a not-monitored
+docker run -it --rm --env-file tagarr.env tagarr:latest radarr tag --progress
+docker run -it --rm --env-file tagarr.env tagarr:latest sonarr tag --progress
+docker run -it --rm --env-file tagarr.env tagarr:latest radarr clean --progress
 ```
 
-### Docker compose
+### Docker Compose con cron
 
-Excludarr can run in cron mode using docker-compose. Using this method the container keeps running and wakes up when you want to run a scheduled command. To use this method you can create a [crontab](.examples/crontab) file and mount it to `/etc/excludarr/crontab` in the container. Make sure you run the command unattended (with the `-y` flag!)
+Tagarr puede ejecutarse de forma programada usando el modo cron. Crea un archivo crontab y móntalo:
 
 ```bash
-$ cat crontab
-
-# minute    hour    day   month   weekday   command
-0           1       *     *       *         excludarr sonarr exclude -a delete -d -e -y
-0           2       *     *       *         excludarr radarr exclude -a delete -d -e -y
+# crontab
+# minuto    hora    día   mes   día_semana   comando
+0           1       *     *     *            tagarr radarr tag --progress
+0           2       *     *     *            tagarr sonarr tag --progress
+0           3       *     *     *            tagarr radarr clean --progress
+0           4       *     *     *            tagarr sonarr clean --progress
 ```
 
-Your docker-compose file can look like [this](.examples/docker-compose-example.yml). Make sure you set the `CRON_MODE` environment setting!
-
-```bash
-$ cat docker-compose.yml
-
+```yaml
+# docker-compose.yml
 version: "3"
 services:
-  excludarr:
-    image: haijeploeg/excludarr
-    container_name: excludarr
+  tagarr:
+    image: tagarr
+    container_name: tagarr
     environment:
       - GENERAL_FAST_SEARCH=true
-      - GENERAL_LOCALE=en_NL
-      - GENERAL_PROVIDERS=netflix, amazon prime video
-      - RADARR_URL=http://radarr.example.com:7878
-      - RADARR_API_KEY=secret
-      - RADARR_VERIFY_SSL=false
-      - SONARR_URL=http://sonarr.example.com:8989
-      - SONARR_API_KEY=secret
-      - SONARR_VERIFY_SSL=false
-      - SONARR_EXCLUDE="Queen of the South, Breaking Bad"
+      - GENERAL_LOCALE=es_ES
+      - GENERAL_PROVIDERS=netflix, amazon prime video, disney plus
+      - RADARR_URL=http://radarr:7878
+      - RADARR_API_KEY=your_api_key
+      - SONARR_URL=http://sonarr:8989
+      - SONARR_API_KEY=your_api_key
       - CRON_MODE=true
     volumes:
-      - ./crontab:/etc/excludarr/crontab
+      - ./crontab:/etc/tagarr/crontab
     restart: unless-stopped
 ```
 
-With the above configuration the container will execute `excludarr sonarr exclude -a delete -d -e -y` every day at 01:00 and `excludarr radarr exclude -a delete -d -e -y` every day at 02:00.
+## Preguntas frecuentes
 
-## FAQ
+**P:** ¿Qué formato tienen las etiquetas?
 
-Below are some frequently asked questions. Please look if your question is listed below before you submit an issue.
+**R:** Las etiquetas se crean en **minúsculas** usando el nombre completo del proveedor tal como lo muestra `tagarr providers list`. Por ejemplo: `netflix`, `amazon prime video`, `disney plus`, `apple itunes`.
 
-##
+---
 
-**Q:** I used the `--legacy` flag before, where can I find it in excludarr v1.0.0?
+**P:** ¿Tagarr elimina o deshabilita el seguimiento de algún contenido?
 
-**A:** Excludarr will now automatically fall back to the legacy delete option if a bulk delete is not possible.
+**R:** No. Tagarr **solo añade y elimina etiquetas**. Nunca borra películas/series ni cambia su estado de seguimiento.
 
-##
+---
 
-**Q:** Where is the `check` command?
+**P:** ¿Cómo funciona el comando `clean`?
 
-**A:** The check command has been replaced by `re-add`.
+**R:** Encuentra películas/series que tienen etiquetas de proveedores de streaming pero que **ya no están disponibles** en esos proveedores según JustWatch, y elimina solo las etiquetas obsoletas.
 
-##
+---
 
-**Q:** When excluding series there are no seasons or episodes displayed, what will excludarr do?
+**P:** ¿Puedo excluir títulos del procesamiento?
 
-**A:** When there are no seasons and episodes displayed this means that excludarr will disable monitoring of the serie if the serie is not ended yet. When a serie is ended and the action was delete, Excludarr will delete the whole serie. When a serie is ended and the action is not-monitored, Excludarr will disable monitoring of the whole serie.
+**R:** Sí, usa la lista `exclude` en tu archivo de configuración dentro de la sección `radarr` o `sonarr`.
 
-##
+---
 
-**Q:** Can I also exclude movies and series from being processed by Excludarr?
+**P:** ¿Cómo sé qué proveedores están disponibles?
 
-**A:** Yes, by using the `exclude` setting in the configuration file. You can set the `exclude` setting under the `radarr` and `sonarr` configuration section. You can see the example [excludarr-example.yml](.examples/excludarr-example.yml) file in this repo.
+**R:** Ejecuta `tagarr providers list` para ver todos los proveedores disponibles para tu localización configurada.
 
-##
+---
 
-**Q:** How can I know what providers I can use in the configuration file?
+**P:** ¿Las etiquetas se aplican por episodio o por serie en Sonarr?
 
-**A:** You can list all the available providers for your specific locale using the `excludarr providers list` command. This should give you a list of all the available providers. Simply copy the full name and insert it in the configuration file.
+**R:** Las etiquetas en Sonarr se aplican a nivel de **serie**. Tagarr revisa todos los episodios de todas las temporadas y agrega los proveedores encontrados, luego etiqueta la serie con todos ellos.
 
-##
+---
 
-**Q:** Does excludarr still support Sonarr V2?
+**P:** ¿Tagarr soporta Sonarr V2?
 
-**A:** No, Sonarr V2 is EOL (End Of Life) and therefor not supported by Excludarr. Please upgrade to Sonarr V3 by reading the [upgrade guide](https://forums.sonarr.tv/t/v3-is-now-officially-stable-v2-is-eol/27858)
-
-##
+**R:** No. Sonarr V2 ha llegado al fin de su vida útil. Por favor, actualiza a Sonarr V3+.

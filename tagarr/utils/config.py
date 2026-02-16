@@ -5,7 +5,7 @@ from yaml import dump, safe_load
 from loguru import logger
 from pathlib import Path
 
-from excludarr.utils.redact import redact_config_dict
+from tagarr.utils.redact import redact_config_dict
 
 
 class Config:
@@ -14,11 +14,11 @@ class Config:
         self.config = None
 
         possible_locations = (
-            "/etc/excludarr/excludarr.yml",
-            f"{Path.home()}/.config/excludarr/excludarr.yml",
-            f"{Path.home()}/.excludarr/config/excludarr.yml",
-            f"{Path.home()}/.excludarr.yml",
-            "./.excludarr.yml",
+            "/etc/tagarr/tagarr.yml",
+            f"{Path.home()}/.config/tagarr/tagarr.yml",
+            f"{Path.home()}/.tagarr/config/tagarr.yml",
+            f"{Path.home()}/.tagarr.yml",
+            "./.tagarr.yml",
         )
 
         config_file = self.determine_location(possible_locations)

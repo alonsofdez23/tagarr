@@ -1,6 +1,6 @@
 import pathlib
 from setuptools import setup, find_packages
-from excludarr import __version__
+from tagarr import __version__
 
 here = pathlib.Path(__file__).parent.resolve()
 
@@ -8,9 +8,9 @@ here = pathlib.Path(__file__).parent.resolve()
 long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
-    name="excludarr",
+    name="tagarr",
     version=__version__,
-    description="Excludarr excludes streaming services from Radarr and Sonarr",
+    description="Tagarr tags movies and series in Radarr and Sonarr with their streaming provider names",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/haijeploeg/excludarr",
@@ -30,7 +30,7 @@ setup(
         "Programming Language :: Python :: 3 :: Only",
     ],
     license="MIT",
-    keywords="excludarr, radarr, sonarr, diskspace, cleanup, management, library, streaming, netflix",
+    keywords="tagarr, radarr, sonarr, streaming, tags, netflix, management, library",
     packages=find_packages(exclude=["ez_setup", "tests*"]),
     python_requires=">=3.6, <4",
     install_requires=[
@@ -43,7 +43,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "excludarr=excludarr.main:cli",
+            "tagarr=tagarr.main:cli",
         ],
     },
     project_urls={

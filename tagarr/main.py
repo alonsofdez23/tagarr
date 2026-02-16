@@ -4,16 +4,16 @@ import sys
 from typing import Optional
 from loguru import logger
 
-import excludarr.commands.radarr as radarr
-import excludarr.commands.sonarr as sonarr
-import excludarr.commands.providers as providers
+import tagarr.commands.radarr as radarr
+import tagarr.commands.sonarr as sonarr
+import tagarr.commands.providers as providers
 
-from excludarr import __version__
+from tagarr import __version__
 
 
 app = typer.Typer()
 app.add_typer(radarr.app, name="radarr", help="Manages movies in Radarr.")
-app.add_typer(sonarr.app, name="sonarr", help="Manages TV shows, seasons and episodes in Sonarr.")
+app.add_typer(sonarr.app, name="sonarr", help="Manages TV shows in Sonarr.")
 app.add_typer(
     providers.app, name="providers", help="List all the possible providers for your locale."
 )
@@ -21,13 +21,13 @@ app.add_typer(
 
 def version_callback(value: bool):
     if value:
-        typer.echo(f"Excludarr: v{__version__}")
+        typer.echo(f"Tagarr: v{__version__}")
         raise typer.Exit()
 
 
 def _setup_logging(debug):
     """
-    Setup the log formatter for Excludarr
+    Setup the log formatter for Tagarr
     """
 
     log_level = "INFO"
@@ -49,23 +49,21 @@ def main(
     version: Optional[bool] = typer.Option(None, "--version", callback=version_callback),
 ):
     """
-    Excludarr is a CLI that interacts with Radarr and Sonarr instances. It completely
-    manages you library in Sonarr and Radarr to only consist out of movies and series that
-    are not present on any of the configured streaming providers. Excludarr can also
-    re monitor movies and series if it is not available anymore on any of the configured
-    streaming providers. You can also configure to delete the already downloaded files of
-    the excluded entry to keep your storage happy!
+    Tagarr is a CLI that interacts with Radarr and Sonarr instances. It detects
+    movies and series available on configured streaming providers and adds tags
+    in Radarr/Sonarr identifying which streaming services each title is available on.
+    It can also clean up stale tags when content is no longer on a provider.
     """
 
     # Setup the logger
     _setup_logging(debug)
 
     # Logging
-    logger.debug(f"Starting Excludarr v{__version__}")
+    logger.debug(f"Starting Tagarr v{__version__}")
 
 
 def cli():
-    app(prog_name="excludarr")
+    app(prog_name="tagarr")
 
 
 if __name__ == "__main__":

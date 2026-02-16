@@ -15,7 +15,7 @@ sonarr_exclude="[${SONARR_EXCLUDE:-''}]"
 cron_mode="${CRON_MODE:-false}"
 
 
-cat << EOF > /etc/excludarr/excludarr.yml
+cat << EOF > /etc/tagarr/tagarr.yml
 general:
   fast_search: $general_fast_search
   locale: $general_locale
@@ -36,20 +36,20 @@ sonarr:
 EOF
 
 if [[ ! -z $TMDB_API_KEY ]]; then
-    cat << EOF >> /etc/excludarr/excludarr.yml
+    cat << EOF >> /etc/tagarr/tagarr.yml
 tmdb:
   api_key: '$tmdb_api_key'
 EOF
 fi
 
 if [ "$cron_mode" = true ]; then
-    if test -f "/etc/excludarr/crontab"; then
-        cp /etc/excludarr/crontab /var/spool/cron/crontabs/root
+    if test -f "/etc/tagarr/crontab"; then
+        cp /etc/tagarr/crontab /var/spool/cron/crontabs/root
         crond -l 8 -f
     else
-        echo "No crontab file mounted! Please mount a valid crontab file at /etc/excludarr/crontab before running in cron mode!"
+        echo "No crontab file mounted! Please mount a valid crontab file at /etc/tagarr/crontab before running in cron mode!"
         exit 1
     fi
 else
-    excludarr $@
+    tagarr $@
 fi

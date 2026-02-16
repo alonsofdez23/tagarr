@@ -2,9 +2,9 @@ import typer
 from typing import Optional
 from loguru import logger
 
-from excludarr.modules.justwatch import justwatch
-from excludarr.utils.config import Config
-from excludarr.utils import output
+from tagarr.modules.justwatch import justwatch
+from tagarr.utils.config import Config
+from tagarr.utils import output
 
 app = typer.Typer()
 
@@ -30,7 +30,7 @@ def init():
     """
     Initializes the command. Reads the configuration.
     """
-    logger.debug("Got radarr as subcommand")
+    logger.debug("Got providers as subcommand")
 
     # Set globals
     global config

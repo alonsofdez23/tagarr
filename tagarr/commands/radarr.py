@@ -1,0 +1,162 @@
+import rich
+import typer
+
+from typing import List, Optional
+from loguru import logger
+
+import tagarr.utils.output as output
+
+from tagarr.core.radarr_actions import RadarrActions
+from tagarr.utils.config import Config
+
+app = typer.Typer()
+
+
+@app.command(help="Tag movies in Radarr with their streaming provider names")
+def tag(
+    providers: Optional[List[str]] = typer.Option(
+        None,
+        "-p",
+        "--provider",
+        metavar="PROVIDER",
+        help="Override the configured streaming providers.",
+    ),
+    locale: Optional[str] = typer.Option(
+        None, "-l", "--locale", metavar="LOCALE", help="Your locale e.g: en_US."
+    ),
+    progress: bool = typer.Option(
+        False, "--progress", help="Track the progress using a progressbar."
+    ),
+):
+    """
+    Detect movies available on configured streaming providers and add tags
+    in Radarr with the provider name (e.g. 'netflix', 'disney plus').
+    """
+    logger.debug("Got tag as subcommand")
+    logger.debug(f"Got CLI values for --progress option: {progress}")
+
+    # Disable the progress bar when debug logging is active
+    if loglevel == 10:
+        disable_progress = True
+    elif progress and loglevel != 10:
+        disable_progress = False
+    else:
+        disable_progress = True
+
+    # Determine if CLI options should overwrite configuration settings
+    if not providers:
+        providers = config.providers
+    if not locale:
+        locale = config.locale
+
+    # Setup Radarr Actions
+    radarr = RadarrActions(config.radarr_url, config.radarr_api_key, locale)
+
+    # Get movies to tag
+    movies_to_tag = radarr.get_movies_to_tag(
+        providers, config.fast_search, disable_progress
+    )
+
+    # Filter out excluded titles
+    movies_to_tag = {
+        id: values
+        for id, values in movies_to_tag.items()
+        if values["title"] not in config.radarr_excludes
+    }
+
+    if movies_to_tag:
+        # Apply tags automatically
+        radarr.tag_movies(movies_to_tag)
+
+        # Print summary
+        output.print_movies_tagged(movies_to_tag)
+
+        rich.print(f"\nSuccessfully tagged {len(movies_to_tag)} movies in Radarr!")
+    else:
+        rich.print("No movies found on the configured streaming providers to tag.")
+
+
+@app.command(help="Remove stale streaming provider tags from movies in Radarr")
+def clean(
+    providers: Optional[List[str]] = typer.Option(
+        None,
+        "-p",
+        "--provider",
+        metavar="PROVIDER",
+        help="Override the configured streaming providers.",
+    ),
+    locale: Optional[str] = typer.Option(
+        None, "-l", "--locale", metavar="LOCALE", help="Your locale e.g: en_US."
+    ),
+    progress: bool = typer.Option(
+        False, "--progress", help="Track the progress using a progressbar."
+    ),
+):
+    """
+    Find movies that have streaming provider tags but are no longer available
+    on those providers, and remove the stale tags.
+    """
+    logger.debug("Got clean as subcommand")
+    logger.debug(f"Got CLI values for --progress option: {progress}")
+
+    # Disable the progress bar when debug logging is active
+    if loglevel == 10:
+        disable_progress = True
+    elif progress and loglevel != 10:
+        disable_progress = False
+    else:
+        disable_progress = True
+
+    # Determine if CLI options should overwrite configuration settings
+    if not providers:
+        providers = config.providers
+    if not locale:
+        locale = config.locale
+
+    # Setup Radarr Actions
+    radarr = RadarrActions(config.radarr_url, config.radarr_api_key, locale)
+
+    # Get movies to clean
+    movies_to_clean = radarr.get_movies_to_clean(
+        providers, config.fast_search, disable_progress
+    )
+
+    # Filter out excluded titles
+    movies_to_clean = {
+        id: values
+        for id, values in movies_to_clean.items()
+        if values["title"] not in config.radarr_excludes
+    }
+
+    if movies_to_clean:
+        # Clean tags automatically
+        radarr.clean_tags(movies_to_clean)
+
+        # Print summary
+        output.print_movies_cleaned(movies_to_clean)
+
+        rich.print(f"\nSuccessfully cleaned tags from {len(movies_to_clean)} movies in Radarr!")
+    else:
+        rich.print("No movies with stale streaming provider tags found.")
+
+
+@app.callback()
+def init():
+    """
+    Initializes the command. Reads the configuration.
+    """
+    logger.debug("Got radarr as subcommand")
+
+    # Set globals
+    global config
+    global loglevel
+
+    # Hacky way to get the current log level context
+    loglevel = logger._core.min_level
+
+    logger.debug("Reading configuration file")
+    config = Config()
+
+
+if __name__ == "__main__":
+    app()

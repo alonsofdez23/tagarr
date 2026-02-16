@@ -1,3 +1,5 @@
+import re
+
 from loguru import logger
 from rich.progress import Progress
 from pyarr import SonarrAPI
@@ -26,9 +28,16 @@ class SonarrActions:
         tags = self.sonarr_client.get_tag()
         self._tag_cache = {tag["label"].lower(): tag["id"] for tag in tags}
 
+    @staticmethod
+    def _sanitize_tag(label):
+        """Sanitize a label for use as a Sonarr tag (only a-z, 0-9, -)."""
+        label = label.lower().replace(" ", "-")
+        label = re.sub(r"[^a-z0-9-]", "", label)
+        return label.strip("-")
+
     def _get_or_create_tag(self, label):
         """Get a tag ID by label, creating it if it doesn't exist."""
-        label = label.lower()
+        label = self._sanitize_tag(label)
 
         if label in self._tag_cache:
             return self._tag_cache[label]

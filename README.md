@@ -31,6 +31,16 @@ cd tagarr
 pip install -e .
 ```
 
+> **Nota:** Si tu sistema no permite instalar paquetes Python globalmente (error `externally-managed-environment`), crea un entorno virtual primero:
+>
+> ```bash
+> python3 -m venv venv
+> source venv/bin/activate
+> pip install -e .
+> ```
+>
+> Cada vez que abras una terminal nueva, activa el entorno con `source venv/bin/activate` antes de usar Tagarr.
+
 ## Configuración
 
 Crea un archivo de configuración en una de las siguientes ubicaciones (en orden de prioridad, el último tiene preferencia):

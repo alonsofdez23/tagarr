@@ -102,7 +102,7 @@ class Config:
 
     @property
     def radarr_excludes(self):
-        return self.radarr_section.get("exclude", [])
+        return self.radarr_section.get("exclude") or []
 
     @property
     def sonarr_url(self):
@@ -118,4 +118,4 @@ class Config:
 
     @property
     def sonarr_excludes(self):
-        return self.sonarr_section.get("exclude", [])
+        return self.sonarr_section.get("exclude") or []

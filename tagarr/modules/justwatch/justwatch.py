@@ -10,11 +10,13 @@ from .exceptions import JustWatchTooManyRequests, JustWatchNotFound, JustWatchBa
 class JustWatch(object):
     def __init__(self, locale, ssl_verify=True):
         # Setup base variables
-        self.base_url = "https://apis.justwatch.com/content"
+        self.locale_api_url = "https://apis.justwatch.com/content"
+        self.graphql_url = "https://apis.justwatch.com/graphql"
         self.ssl_verify = ssl_verify
 
         # Setup session
         self.session = requests.Session()
+        self.session.headers.update({"User-Agent": "Tagarr"})
         self.session.verify = ssl_verify
 
         # Setup retries on failure
@@ -22,7 +24,7 @@ class JustWatch(object):
             total=5,
             backoff_factor=0.5,
             status_forcelist=[429, 500, 502, 503, 504],
-            method_whitelist=["GET", "POST"],
+            allowed_methods=["GET", "POST"],
         )
 
         self.session.mount("http://", HTTPAdapter(max_retries=retries))
@@ -31,54 +33,21 @@ class JustWatch(object):
         # Setup locale by verifying its input
         self.locale = self._get_full_locale(locale)
 
+        # Extract country and language codes for GraphQL queries
+        # e.g. "es_ES" -> country="ES", language="es"
+        parts = self.locale.split("_")
+        self.language = parts[0]
+        self.country = parts[1] if len(parts) > 1 else parts[0].upper()
+
     def __exit__(self, *args):
         self.session.close()
 
-    def _build_url(self, path):
-        return "{}{}".format(self.base_url, path)
-
-    def _filter_api_error(self, data):
-
-        if data.status_code == 400:
-            raise JustWatchBadRequest(data.text)
-        elif data.status_code == 404:
-            raise JustWatchNotFound()
-        elif data.status_code == 429:
-            raise JustWatchTooManyRequests()
-
-        try:
-            result_json = data.json()
-        except JSONDecodeError:
-            return data.text
-
-        return result_json
-
-    def _http_request(self, method, path, json=None, params=None):
-        url = self._build_url(path)
-        request = requests.Request(method, url, json=json, params=params)
-
-        prepped = self.session.prepare_request(request)
-        result = self.session.send(prepped)
-
-        return self._filter_api_error(result)
-
-    def _http_get(self, path, params=None):
-        return self._http_request("get", path, params=params)
-
-    def _http_post(self, path, json=None):
-        return self._http_request("post", path, json=json)
-
-    def _http_put(self, path, params=None, json=None):
-        return self._http_request("put", path, params=params, json=json)
-
-    def _http_delete(self, path, json=None, params=None):
-        return self._http_request("delete", path, json=json, params=params)
-
     def _get_full_locale(self, locale):
         default_locale = "en_US"
-        path = "/locales/state"
+        url = f"{self.locale_api_url}/locales/state"
 
-        jw_locales = self._http_get(path)
+        result = self.session.get(url)
+        jw_locales = result.json()
 
         valid_locale = any([True for i in jw_locales if i["full_locale"] == locale])
 
@@ -92,10 +61,60 @@ class JustWatch(object):
 
         return locale
 
-    def get_providers(self):
-        path = f"/providers/locale/{self.locale}"
+    def _graphql_query(self, query, variables=None):
+        payload = {"query": query}
+        if variables:
+            payload["variables"] = variables
 
-        return self._http_get(path)
+        result = self.session.post(self.graphql_url, json=payload)
+
+        if result.status_code == 400:
+            raise JustWatchBadRequest(result.text)
+        elif result.status_code == 404:
+            raise JustWatchNotFound()
+        elif result.status_code == 429:
+            raise JustWatchTooManyRequests()
+
+        try:
+            data = result.json()
+        except JSONDecodeError:
+            raise JustWatchBadRequest(result.text)
+
+        if "errors" in data:
+            error_msg = data["errors"][0].get("message", "Unknown GraphQL error")
+            raise JustWatchBadRequest(error_msg)
+
+        return data.get("data", {})
+
+    def _normalize_id(self, jw_id, prefix):
+        """Ensure an ID has the correct prefix for GraphQL (e.g. 'tm', 'ts', 'tss')."""
+        jw_id_str = str(jw_id)
+        if jw_id_str.startswith(prefix):
+            return jw_id_str
+        return f"{prefix}{jw_id_str}"
+
+    def get_providers(self):
+        query = """
+        query GetPackages($country: Country!, $platform: Platform!) {
+            packages(country: $country, platform: $platform) {
+                packageId
+                clearName
+                shortName
+            }
+        }
+        """
+        variables = {"country": self.country, "platform": "WEB"}
+        data = self._graphql_query(query, variables)
+
+        # Transform to legacy format: [{"id": ..., "clear_name": ..., "short_name": ...}]
+        return [
+            {
+                "id": p["packageId"],
+                "clear_name": p["clearName"],
+                "short_name": p["shortName"],
+            }
+            for p in data.get("packages", [])
+        ]
 
     def query_title(self, query, content_type, fast=True, result={}, page=1, **kwargs):
         """
@@ -104,35 +123,245 @@ class JustWatch(object):
         :query: the title of the show or movie to search for
         :content_type: can either be 'show' or 'movie'. Can also be a list of types.
         """
-        path = f"/titles/{self.locale}/popular"
-
         if isinstance(content_type, str):
             content_type = content_type.split(",")
 
-        json = {"query": query, "content_types": content_type}
-        if kwargs:
-            json.update(kwargs)
+        # Map content types to GraphQL objectTypes
+        type_map = {"movie": "MOVIE", "show": "SHOW"}
+        object_types = [type_map.get(ct, ct.upper()) for ct in content_type]
 
-        page_result = self._http_post(path, json=json)
-        result.update(page_result)
+        page_size = kwargs.get("page_size", 20)
 
-        if not fast and page < result["total_pages"]:
-            page += 1
-            self.query_title(query, content_type, fast=fast, result=result, page=page)
+        # Build filter
+        gql_filter = {
+            "searchQuery": query,
+            "objectTypes": object_types,
+        }
+
+        # Map legacy kwargs to GraphQL filter
+        if "monetization_types" in kwargs:
+            monetization_map = {"flatrate": "FLATRATE", "rent": "RENT", "buy": "BUY", "free": "FREE", "ads": "ADS"}
+            gql_filter["monetizationTypes"] = [
+                monetization_map.get(m, m.upper()) for m in kwargs["monetization_types"]
+            ]
+
+        if "providers" in kwargs:
+            gql_filter["packages"] = kwargs["providers"]
+
+        if "release_year_from" in kwargs:
+            gql_filter["releaseYear"] = {"min": kwargs["release_year_from"]}
+
+        if "release_year_until" in kwargs:
+            if "releaseYear" in gql_filter:
+                gql_filter["releaseYear"]["max"] = kwargs["release_year_until"]
+            else:
+                gql_filter["releaseYear"] = {"max": kwargs["release_year_until"]}
+
+        gql_query = """
+        query GetPopularTitles(
+            $country: Country!,
+            $first: Int!,
+            $filter: TitleFilter,
+            $language: Language!
+        ) {
+            popularTitles(country: $country, first: $first, filter: $filter) {
+                edges {
+                    node {
+                        id
+                        objectType
+                        content(country: $country, language: $language) {
+                            title
+                            originalReleaseYear
+                        }
+                    }
+                }
+            }
+        }
+        """
+        variables = {
+            "country": self.country,
+            "first": page_size,
+            "filter": gql_filter,
+            "language": self.language,
+        }
+
+        data = self._graphql_query(gql_query, variables)
+
+        edges = data.get("popularTitles", {}).get("edges", [])
+        items = [{"id": edge["node"]["id"]} for edge in edges]
+
+        return {"items": items, "total_pages": 1}
+
+    def get_movie(self, jw_id):
+        node_id = self._normalize_id(jw_id, "tm")
+
+        query = """
+        query GetMovie($nodeId: ID!, $country: Country!, $language: Language!) {
+            node(id: $nodeId) {
+                ... on Movie {
+                    id
+                    content(country: $country, language: $language) {
+                        title
+                        externalIds {
+                            imdbId
+                            tmdbId
+                        }
+                    }
+                    offers(country: $country, platform: WEB) {
+                        package {
+                            packageId
+                            shortName
+                        }
+                    }
+                }
+            }
+        }
+        """
+        variables = {
+            "nodeId": node_id,
+            "country": self.country,
+            "language": self.language,
+        }
+
+        data = self._graphql_query(query, variables)
+        node = data.get("node")
+
+        if not node:
+            raise JustWatchNotFound()
+
+        return self._transform_title_data(node)
+
+    def get_show(self, jw_id):
+        node_id = self._normalize_id(jw_id, "ts")
+
+        query = """
+        query GetShow($nodeId: ID!, $country: Country!, $language: Language!) {
+            node(id: $nodeId) {
+                ... on Show {
+                    id
+                    content(country: $country, language: $language) {
+                        title
+                        externalIds {
+                            imdbId
+                            tmdbId
+                        }
+                    }
+                    offers(country: $country, platform: WEB) {
+                        package {
+                            packageId
+                            shortName
+                        }
+                    }
+                    seasons {
+                        id
+                    }
+                }
+            }
+        }
+        """
+        variables = {
+            "nodeId": node_id,
+            "country": self.country,
+            "language": self.language,
+        }
+
+        data = self._graphql_query(query, variables)
+        node = data.get("node")
+
+        if not node:
+            raise JustWatchNotFound()
+
+        result = self._transform_title_data(node)
+
+        # Transform seasons to legacy format: [{"id": "tss123"}]
+        if "seasons" in node and node["seasons"]:
+            result["seasons"] = [{"id": s["id"]} for s in node["seasons"]]
+        else:
+            result["seasons"] = []
 
         return result
 
-    def get_movie(self, jw_id):
-        path = f"/titles/movie/{jw_id}/locale/{self.locale}"
-
-        return self._http_get(path)
-
-    def get_show(self, jw_id):
-        path = f"/titles/show/{jw_id}/locale/{self.locale}"
-
-        return self._http_get(path)
-
     def get_season(self, jw_id):
-        path = f"/titles/show_season/{jw_id}/locale/{self.locale}"
+        node_id = self._normalize_id(jw_id, "tss")
 
-        return self._http_get(path)
+        query = """
+        query GetSeason($nodeId: ID!, $country: Country!, $language: Language!) {
+            node(id: $nodeId) {
+                ... on Season {
+                    id
+                    content(country: $country, language: $language) {
+                        title
+                    }
+                    episodes {
+                        id
+                        offers(country: $country, platform: WEB) {
+                            package {
+                                packageId
+                                shortName
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        variables = {
+            "nodeId": node_id,
+            "country": self.country,
+            "language": self.language,
+        }
+
+        data = self._graphql_query(query, variables)
+        node = data.get("node")
+
+        if not node:
+            raise JustWatchNotFound()
+
+        # Transform episodes to legacy format with offers
+        episodes = []
+        for ep in node.get("episodes", []):
+            episode_data = {"id": ep["id"]}
+            offers = []
+            for offer in ep.get("offers", []):
+                pkg = offer.get("package", {})
+                offers.append({
+                    "provider_id": pkg.get("packageId"),
+                    "package_short_name": pkg.get("shortName"),
+                })
+            if offers:
+                episode_data["offers"] = offers
+            episodes.append(episode_data)
+
+        return {"episodes": episodes}
+
+    def _transform_title_data(self, node):
+        """Transform GraphQL node data to legacy REST format."""
+        result = {}
+
+        content = node.get("content", {})
+
+        # Transform external_ids to legacy format
+        ext_ids_raw = content.get("externalIds", {})
+        if ext_ids_raw:
+            external_ids = []
+            if ext_ids_raw.get("tmdbId"):
+                external_ids.append({"provider": "tmdb", "external_id": str(ext_ids_raw["tmdbId"])})
+            if ext_ids_raw.get("imdbId"):
+                external_ids.append({"provider": "imdb", "external_id": ext_ids_raw["imdbId"]})
+            result["external_ids"] = external_ids
+        else:
+            result["external_ids"] = []
+
+        # Transform offers to legacy format
+        raw_offers = node.get("offers", [])
+        if raw_offers:
+            offers = []
+            for offer in raw_offers:
+                pkg = offer.get("package", {})
+                offers.append({
+                    "provider_id": pkg.get("packageId"),
+                    "package_short_name": pkg.get("shortName"),
+                })
+            result["offers"] = offers
+
+        return result

@@ -1,29 +1,23 @@
 # Tagarr
 
-Tagarr es una herramienta CLI que interactúa con instancias de Radarr y Sonarr. Detecta películas y series disponibles en los proveedores de streaming configurados (a través de JustWatch) y **añade etiquetas** en Radarr/Sonarr con el nombre del proveedor (p. ej. `netflix`, `amazon prime video`, `disney plus`). También puede **limpiar etiquetas obsoletas** cuando el contenido ya no está disponible en un proveedor.
+Tagarr es una herramienta CLI que interactúa con instancias de Radarr y Sonarr. Detecta películas y series disponibles en los proveedores de streaming configurados (a través de JustWatch) y **añade etiquetas** en Radarr/Sonarr con el nombre del proveedor (p. ej. `netflix`, `amazon-prime-video`, `disney-plus`). También puede **limpiar etiquetas obsoletas** cuando el contenido ya no está disponible en un proveedor.
 
 > Basado en [Excludarr](https://github.com/haijeploeg/excludarr) de Haije Ploeg. En lugar de eliminar o deshabilitar el seguimiento, Tagarr se centra en etiquetar tu biblioteca con información de proveedores de streaming.
 
 ## Cómo funciona
 
-1. Tagarr consulta JustWatch para averiguar qué proveedores de streaming configurados ofrecen cada película/serie.
-2. Para cada coincidencia, crea una etiqueta en Radarr/Sonarr con el nombre del proveedor en **minúsculas** (p. ej. `netflix`, `disney plus`).
+1. Tagarr consulta la API GraphQL de JustWatch para averiguar qué proveedores de streaming configurados ofrecen cada película/serie.
+2. Para cada coincidencia, crea una etiqueta en Radarr/Sonarr con el nombre del proveedor sanitizado (solo `a-z`, `0-9` y `-`). Por ejemplo: `netflix`, `amazon-prime-video`, `disney-plus`.
 3. Las etiquetas se añaden al objeto de la película/serie para que puedas filtrar tu biblioteca por proveedor de streaming en la interfaz de Radarr/Sonarr.
 4. El comando `clean` elimina las etiquetas de los títulos que **ya no están disponibles** en un proveedor.
 
 ## Requisitos previos
 
-- Python 3.6+ o Docker
-- Sonarr V3+ (V2 no está soportado)
+- Python 3.8+ o Docker
 - Radarr V3+
+- Sonarr V3+ (V2 no está soportado)
 
 ## Instalación
-
-```bash
-pip install tagarr
-```
-
-O instalar en modo desarrollo:
 
 ```bash
 git clone <repo-url>
@@ -110,19 +104,18 @@ tagarr radarr tag --progress
 Ejemplo de salida:
 
 ```
-       ╷
- Title │ Providers Tagged
-╶──────┼──────────────────────────────╴
- Red Notice          │ netflix
- The Last Duel       │ apple itunes
- The Amazing Spider-Man │ netflix, apple itunes
- Spider-Man: Homecoming │ apple itunes
-       ╵
+                                                  ╷
+ Title                                            │ Providers Tagged
+╶─────────────────────────────────────────────────┼────────────────────────────╴
+ El señor de los anillos: La comunidad del anillo │ netflix, amazon-prime-video
+ Lilo y Stitch                                    │ disney-plus
+ The Batman                                       │ netflix, amazon-prime-video
+                                                  ╵
 
-Successfully tagged 4 movies in Radarr!
+Successfully tagged 3 movies in Radarr!
 ```
 
-Después de ejecutar este comando, puedes ir a Radarr y filtrar tu biblioteca por etiquetas como `netflix`, `disney plus`, etc.
+Después de ejecutar este comando, puedes ir a Radarr y filtrar tu biblioteca por etiquetas como `netflix`, `disney-plus`, etc.
 
 #### Limpiar etiquetas obsoletas
 
@@ -138,7 +131,7 @@ Ejemplo de salida:
        ╷
  Title │ Tags Removed
 ╶──────┼──────────────────╴
- F9    │ apple itunes
+ F9    │ disney-plus
        ╵
 
 Successfully cleaned tags from 1 movies in Radarr!
@@ -152,20 +145,6 @@ Detecta series disponibles en los proveedores de streaming configurados y añade
 
 ```bash
 tagarr sonarr tag --progress
-```
-
-Ejemplo de salida:
-
-```
-       ╷
- Title │ Providers Tagged
-╶──────┼──────────────────────╴
- Breaking Bad        │ netflix
- Stranger Things     │ netflix
- The Office (US)     │ netflix
-       ╵
-
-Successfully tagged 3 series in Sonarr!
 ```
 
 #### Limpiar etiquetas obsoletas
@@ -275,7 +254,7 @@ services:
 
 **P:** ¿Qué formato tienen las etiquetas?
 
-**R:** Las etiquetas se crean en **minúsculas** usando el nombre completo del proveedor tal como lo muestra `tagarr providers list`. Por ejemplo: `netflix`, `amazon prime video`, `disney plus`, `apple itunes`.
+**R:** Las etiquetas se crean usando el nombre del proveedor en minúsculas, reemplazando espacios y caracteres especiales por guiones. Por ejemplo: `netflix`, `amazon-prime-video`, `disney-plus`, `hbo-max`. Esto cumple con las restricciones de Radarr/Sonarr que solo permiten caracteres `a-z`, `0-9` y `-` en etiquetas.
 
 ---
 

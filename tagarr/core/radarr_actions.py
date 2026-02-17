@@ -102,12 +102,16 @@ class RadarrActions:
 
         return None, None
 
-    def get_movies_to_tag(self, providers, fast=True, disable_progress=False, not_available_tag=None):
+    def get_movies_to_tag(self, providers, fast=True, disable_progress=False, not_available_tag=None, movie_id=None):
         """Find movies available on streaming providers and return them with provider names."""
         tag_movies = {}
 
-        logger.debug("Getting all the movies from Radarr")
-        radarr_movies = self.radarr_client.get_movie()
+        if movie_id:
+            logger.debug(f"Getting movie with ID {movie_id} from Radarr")
+            radarr_movies = [self.radarr_client.get_movie(id_=movie_id)]
+        else:
+            logger.debug("Getting all the movies from Radarr")
+            radarr_movies = self.radarr_client.get_movie()
 
         raw_jw_providers = self.justwatch_client.get_providers()
         jw_providers = filters.get_providers(raw_jw_providers, providers)
@@ -194,12 +198,16 @@ class RadarrActions:
             except Exception as e:
                 logger.error(f"Failed to update tags for {title}: {e}")
 
-    def get_movies_to_clean(self, providers, fast=True, disable_progress=False, not_available_tag=None):
+    def get_movies_to_clean(self, providers, fast=True, disable_progress=False, not_available_tag=None, movie_id=None):
         """Find movies with stale streaming provider tags."""
         clean_movies = {}
 
-        logger.debug("Getting all the movies from Radarr")
-        radarr_movies = self.radarr_client.get_movie()
+        if movie_id:
+            logger.debug(f"Getting movie with ID {movie_id} from Radarr")
+            radarr_movies = [self.radarr_client.get_movie(id_=movie_id)]
+        else:
+            logger.debug("Getting all the movies from Radarr")
+            radarr_movies = self.radarr_client.get_movie()
 
         # Load tags and build reverse lookup (tag_id -> label)
         self._load_tags()

@@ -27,6 +27,10 @@ def tag(
     progress: bool = typer.Option(
         False, "--progress", help="Muestra una barra de progreso."
     ),
+    series_id: Optional[int] = typer.Option(
+        None, "--id", metavar="ID",
+        help="ID de Sonarr de una serie concreta a procesar.",
+    ),
 ):
     """
     Detect series available on configured streaming providers and add tags
@@ -56,7 +60,8 @@ def tag(
     # Get series to tag
     series_to_tag = sonarr.get_series_to_tag(
         providers, config.fast_search, disable_progress,
-        tmdb_api_key=config.tmdb_api_key, not_available_tag=config.not_available_tag
+        tmdb_api_key=config.tmdb_api_key, not_available_tag=config.not_available_tag,
+        series_id=series_id
     )
 
     # Filter out excluded titles
@@ -93,6 +98,10 @@ def clean(
     progress: bool = typer.Option(
         False, "--progress", help="Muestra una barra de progreso."
     ),
+    series_id: Optional[int] = typer.Option(
+        None, "--id", metavar="ID",
+        help="ID de Sonarr de una serie concreta a procesar.",
+    ),
 ):
     """
     Find series that have streaming provider tags but are no longer available
@@ -121,7 +130,8 @@ def clean(
     # Get series to clean
     series_to_clean = sonarr.get_series_to_clean(
         providers, config.fast_search, disable_progress,
-        tmdb_api_key=config.tmdb_api_key, not_available_tag=config.not_available_tag
+        tmdb_api_key=config.tmdb_api_key, not_available_tag=config.not_available_tag,
+        series_id=series_id
     )
 
     # Filter out excluded titles

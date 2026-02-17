@@ -162,14 +162,18 @@ class SonarrActions:
         return jw_id, jw_serie_data
 
     def get_series_to_tag(
-        self, providers, fast=True, disable_progress=False, tmdb_api_key=None, not_available_tag=None
+        self, providers, fast=True, disable_progress=False, tmdb_api_key=None, not_available_tag=None, series_id=None
     ):
         """Find series available on streaming providers and return them with provider names.
         Tags are applied at the series level, so all providers from all episodes are aggregated."""
         tag_series = {}
 
-        logger.debug("Getting all the series from Sonarr")
-        sonarr_series = self.sonarr_client.get_series()
+        if series_id:
+            logger.debug(f"Getting series with ID {series_id} from Sonarr")
+            sonarr_series = [self.sonarr_client.get_series(id_=series_id)]
+        else:
+            logger.debug("Getting all the series from Sonarr")
+            sonarr_series = self.sonarr_client.get_series()
 
         raw_jw_providers = self.justwatch_client.get_providers()
         jw_providers = filters.get_providers(raw_jw_providers, providers)
@@ -264,13 +268,17 @@ class SonarrActions:
                 logger.error(f"Failed to update tags for {title}: {e}")
 
     def get_series_to_clean(
-        self, providers, fast=True, disable_progress=False, tmdb_api_key=None, not_available_tag=None
+        self, providers, fast=True, disable_progress=False, tmdb_api_key=None, not_available_tag=None, series_id=None
     ):
         """Find series with stale streaming provider tags."""
         clean_series = {}
 
-        logger.debug("Getting all the series from Sonarr")
-        sonarr_series = self.sonarr_client.get_series()
+        if series_id:
+            logger.debug(f"Getting series with ID {series_id} from Sonarr")
+            sonarr_series = [self.sonarr_client.get_series(id_=series_id)]
+        else:
+            logger.debug("Getting all the series from Sonarr")
+            sonarr_series = self.sonarr_client.get_series()
 
         # Load tags and build reverse lookup (tag_id -> label)
         self._load_tags()

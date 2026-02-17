@@ -27,6 +27,10 @@ def tag(
     progress: bool = typer.Option(
         False, "--progress", help="Muestra una barra de progreso."
     ),
+    movie_id: Optional[int] = typer.Option(
+        None, "--id", metavar="ID",
+        help="ID de Radarr de una película concreta a procesar.",
+    ),
 ):
     """
     Detect movies available on configured streaming providers and add tags
@@ -55,7 +59,7 @@ def tag(
     # Get movies to tag
     movies_to_tag = radarr.get_movies_to_tag(
         providers, config.fast_search, disable_progress,
-        not_available_tag=config.not_available_tag
+        not_available_tag=config.not_available_tag, movie_id=movie_id
     )
 
     # Filter out excluded titles
@@ -92,6 +96,10 @@ def clean(
     progress: bool = typer.Option(
         False, "--progress", help="Muestra una barra de progreso."
     ),
+    movie_id: Optional[int] = typer.Option(
+        None, "--id", metavar="ID",
+        help="ID de Radarr de una película concreta a procesar.",
+    ),
 ):
     """
     Find movies that have streaming provider tags but are no longer available
@@ -120,7 +128,7 @@ def clean(
     # Get movies to clean
     movies_to_clean = radarr.get_movies_to_clean(
         providers, config.fast_search, disable_progress,
-        not_available_tag=config.not_available_tag
+        not_available_tag=config.not_available_tag, movie_id=movie_id
     )
 
     # Filter out excluded titles

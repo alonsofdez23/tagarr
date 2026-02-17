@@ -213,6 +213,7 @@ Opción | Corto | Descripción
 `--provider` | `-p` | Sobrescribe los proveedores de streaming configurados (se puede especificar varias veces)
 `--locale` | `-l` | Sobrescribe la localización configurada (p. ej. `en_US`, `es_ES`)
 `--progress` | | Muestra una barra de progreso durante el procesamiento
+`--id` | | ID de Radarr/Sonarr de un elemento concreto a procesar (en lugar de toda la biblioteca)
 
 El comando `purge-tag` soporta:
 
@@ -245,8 +246,135 @@ tagarr radarr purge-tag --tag no-streaming
 # Eliminar la etiqueta not_available_tag (del config) de todas las series
 tagarr sonarr purge-tag
 
+# Etiquetar solo una película por su ID de Radarr
+tagarr radarr tag --id 67
+
+# Limpiar etiquetas de una serie por su ID de Sonarr
+tagarr sonarr clean --id 15
+
 # Modo depuración
 tagarr --debug radarr tag --progress
+```
+
+### Integración con Custom Scripts de Radarr/Sonarr
+
+Puedes usar la opción `--id` junto con los Custom Scripts de Radarr/Sonarr para etiquetar automáticamente películas y series cuando se añaden o descargan. En lugar de recorrer toda la biblioteca, Tagarr solo procesa el elemento afectado por el evento.
+
+El repositorio incluye scripts listos para usar en la carpeta `scripts/`:
+
+- `scripts/tagarr-radarr.sh` — Custom Script para Radarr
+- `scripts/tagarr-sonarr.sh` — Custom Script para Sonarr
+
+#### Cómo funcionan
+
+Radarr y Sonarr permiten ejecutar scripts personalizados en respuesta a eventos (Settings > Connect > Custom Script). Cuando ocurre un evento como añadir una película o completar una descarga, pasan el ID del elemento como variable de entorno (`radarr_movie_id` / `sonarr_series_id`). Los scripts de Tagarr usan ese ID con la opción `--id` para etiquetar solo ese elemento.
+
+Los scripts se conectan por **SSH** al host donde está instalado Tagarr, lo que permite usarlos cuando Radarr/Sonarr se ejecutan en máquinas o contenedores diferentes (p. ej. LXC de Proxmox).
+
+#### Configuración
+
+Los scripts se configuran con las siguientes variables de entorno (también se pueden editar directamente en el script):
+
+Variable | Por defecto | Descripción
+--- | --- | ---
+`TAGARR_HOST` | `user@host` | Usuario y dirección del host donde está instalado Tagarr
+`SSH_KEY` | `/root/.ssh/tagarr_key` | Ruta a la clave SSH privada
+`TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
+`LOGFILE` | `~/.local/log/tagarr-radarr.log` o `~/.local/log/tagarr-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
+
+#### Instalación paso a paso
+
+1. **Genera una clave SSH** en la máquina donde corre Radarr/Sonarr y cópiala al host de Tagarr:
+
+```bash
+ssh-keygen -t ed25519 -f /root/.ssh/tagarr_key -N ""
+ssh-copy-id -i /root/.ssh/tagarr_key usuario@host-tagarr
+```
+
+2. **Copia el script** correspondiente a la máquina de Radarr/Sonarr:
+
+```bash
+scp scripts/tagarr-radarr.sh root@host-radarr:/usr/local/bin/tagarr-radarr.sh
+scp scripts/tagarr-sonarr.sh root@host-sonarr:/usr/local/bin/tagarr-sonarr.sh
+```
+
+3. **Configura las variables** editando el script o exportándolas en el entorno:
+
+```bash
+export TAGARR_HOST="usuario@192.168.1.100"
+export TAGARR_VENV="/home/usuario/tagarr/venv"
+```
+
+4. **Configura el Custom Script** en Radarr/Sonarr:
+   - Ve a Settings > Connect > + > Custom Script
+   - Path: `/usr/local/bin/tagarr-radarr.sh` (o `tagarr-sonarr.sh`)
+   - Triggers: marca "On Movie Added" (Radarr) o "On Series Add" (Sonarr)
+   - Pulsa "Test" para verificar la conexión SSH
+
+#### Verificación
+
+Los scripts escriben un log con cada ejecución. Para comprobar que funcionan:
+
+```bash
+# En la máquina de Radarr
+cat ~/.local/log/tagarr-radarr.log
+
+# En la máquina de Sonarr
+cat ~/.local/log/tagarr-sonarr.log
+```
+
+> **Nota:** Asegúrate de que el archivo de configuración de Tagarr (`tagarr.yml`) esté en una ruta global como `~/.config/tagarr/tagarr.yml` en el host de Tagarr, ya que los scripts se ejecutan por SSH y no necesariamente desde el directorio del proyecto.
+
+### Ejecución programada con cron
+
+Los Custom Scripts solo etiquetan elementos nuevos cuando se añaden. Para mantener las etiquetas actualizadas (detectar cambios de proveedor y limpiar etiquetas obsoletas), es recomendable ejecutar Tagarr periódicamente sobre toda la biblioteca.
+
+El repositorio incluye scripts de cron listos para usar:
+
+- `scripts/cron-radarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Radarr
+- `scripts/cron-sonarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Sonarr
+
+#### Configuración
+
+Los scripts se configuran con las siguientes variables de entorno (también se pueden editar directamente en el script):
+
+Variable | Por defecto | Descripción
+--- | --- | ---
+`TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
+`LOGFILE` | `~/.local/log/tagarr-cron-radarr.log` o `~/.local/log/tagarr-cron-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
+
+#### Instalación
+
+Añade las entradas al crontab del host donde está instalado Tagarr:
+
+```bash
+crontab -e
+```
+
+```bash
+# Radarr: cada día a las 3:00
+0 3 * * * TAGARR_VENV=/ruta/al/venv /ruta/a/scripts/cron-radarr.sh
+
+# Sonarr: cada día a las 4:00
+0 4 * * * TAGARR_VENV=/ruta/al/venv /ruta/a/scripts/cron-sonarr.sh
+```
+
+#### Verificación
+
+```bash
+cat ~/.local/log/tagarr-cron-radarr.log
+cat ~/.local/log/tagarr-cron-sonarr.log
+```
+
+Ejemplo de salida:
+
+```
+[Mon Feb 17 03:00:01 UTC 2026] Inicio: tagarr radarr tag
+Successfully tagged 5 movies in Radarr!
+[Mon Feb 17 03:01:30 UTC 2026] Exit code: 0
+[Mon Feb 17 03:01:30 UTC 2026] Inicio: tagarr radarr clean
+Successfully cleaned tags from 2 movies in Radarr!
+[Mon Feb 17 03:02:45 UTC 2026] Exit code: 0
 ```
 
 ## Docker

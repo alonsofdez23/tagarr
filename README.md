@@ -53,6 +53,8 @@ Crea un archivo de configuración en una de las siguientes ubicaciones (en orden
 general:
   fast_search: true
   locale: es_ES
+  # Opcional: etiqueta para contenido no disponible en ningún proveedor
+  # not_available_tag: no-streaming
   providers:
     - Netflix
     - Amazon Prime Video
@@ -117,6 +119,32 @@ Successfully tagged 3 movies in Radarr!
 
 Después de ejecutar este comando, puedes ir a Radarr y filtrar tu biblioteca por etiquetas como `netflix`, `disney-plus`, etc.
 
+#### Etiquetar contenido no disponible
+
+Si configuras `not_available_tag` en la sección `general`, las películas que **no estén disponibles en ningún proveedor** recibirán esa etiqueta. Esto permite filtrar en Radarr el contenido que no está en ninguna plataforma de streaming:
+
+```yaml
+general:
+  not_available_tag: no-streaming
+```
+
+```bash
+tagarr radarr tag --progress
+```
+
+Ejemplo de salida:
+
+```
+                                                  ╷
+ Title                                            │ Providers Tagged
+╶─────────────────────────────────────────────────┼────────────────────────────╴
+ El señor de los anillos: La comunidad del anillo │ netflix, amazon-prime-video
+ Inception                                        │ no-streaming
+                                                  ╵
+```
+
+El comando `clean` eliminará automáticamente la etiqueta `no-streaming` de las películas que **ahora sí tienen proveedores**.
+
 #### Limpiar etiquetas obsoletas
 
 Elimina las etiquetas de proveedores de streaming de películas que ya no están disponibles en esos proveedores:
@@ -137,6 +165,18 @@ Ejemplo de salida:
 Successfully cleaned tags from 1 movies in Radarr!
 ```
 
+#### Purgar una etiqueta
+
+Elimina una etiqueta concreta de **todas** las películas en Radarr. Útil para eliminar por completo la etiqueta `no-streaming` si decides dejar de usar la funcionalidad:
+
+```bash
+# Usa not_available_tag del config por defecto
+tagarr radarr purge-tag
+
+# O especifica una etiqueta concreta
+tagarr radarr purge-tag --tag no-streaming
+```
+
 ### Sonarr
 
 #### Etiquetar series
@@ -155,15 +195,30 @@ Elimina las etiquetas de proveedores de streaming de series que ya no están dis
 tagarr sonarr clean --progress
 ```
 
+#### Purgar una etiqueta
+
+Elimina una etiqueta concreta de **todas** las series en Sonarr:
+
+```bash
+tagarr sonarr purge-tag
+tagarr sonarr purge-tag --tag no-streaming
+```
+
 ### Opciones CLI
 
-Todos los comandos `tag` y `clean` soportan estas opciones:
+Los comandos `tag` y `clean` soportan estas opciones:
 
 Opción | Corto | Descripción
 --- | --- | ---
 `--provider` | `-p` | Sobrescribe los proveedores de streaming configurados (se puede especificar varias veces)
 `--locale` | `-l` | Sobrescribe la localización configurada (p. ej. `en_US`, `es_ES`)
 `--progress` | | Muestra una barra de progreso durante el procesamiento
+
+El comando `purge-tag` soporta:
+
+Opción | Corto | Descripción
+--- | --- | ---
+`--tag` | `-t` | Etiqueta a eliminar. Por defecto usa `not_available_tag` del config
 
 Opciones globales:
 
@@ -184,6 +239,12 @@ tagarr sonarr tag -p Netflix -p "Disney Plus" --progress
 # Limpiar etiquetas obsoletas con una localización diferente
 tagarr radarr clean -l en_US --progress
 
+# Eliminar la etiqueta "no-streaming" de todas las películas
+tagarr radarr purge-tag --tag no-streaming
+
+# Eliminar la etiqueta not_available_tag (del config) de todas las series
+tagarr sonarr purge-tag
+
 # Modo depuración
 tagarr --debug radarr tag --progress
 ```
@@ -197,6 +258,7 @@ Variable | Por defecto | Descripción
 GENERAL_FAST_SEARCH | true | Activa o desactiva la búsqueda rápida, puede ser `true` o `false`
 GENERAL_LOCALE | en_US | La localización a usar, también puede ser un código de país de dos letras
 GENERAL_PROVIDERS | netflix | Lista de proveedores separados por comas, p. ej. `netflix, amazon prime video`
+GENERAL_NOT_AVAILABLE_TAG | - | Etiqueta para contenido no disponible en ningún proveedor (p. ej. `no-streaming`)
 TMDB_API_KEY | - | Tu clave API de TMDB (opcional, se usa como alternativa para buscar series)
 RADARR_URL | http://localhost:7878 | La URL de Radarr
 RADARR_API_KEY | secret | Tu clave API de Radarr
@@ -285,6 +347,12 @@ services:
 **P:** ¿Las etiquetas se aplican por episodio o por serie en Sonarr?
 
 **R:** Las etiquetas en Sonarr se aplican a nivel de **serie**. Tagarr revisa todos los episodios de todas las temporadas y agrega los proveedores encontrados, luego etiqueta la serie con todos ellos.
+
+---
+
+**P:** ¿Qué es `not_available_tag`?
+
+**R:** Es una opción que permite etiquetar las películas/series que **no están disponibles en ninguno** de los proveedores configurados. Por ejemplo, con `not_available_tag: no-streaming`, todo el contenido sin proveedor recibirá la etiqueta `no-streaming`. El comando `clean` la eliminará automáticamente si el contenido vuelve a estar disponible. Si quieres eliminar la etiqueta de todo de golpe, usa `tagarr radarr purge-tag` o `tagarr sonarr purge-tag`.
 
 ---
 

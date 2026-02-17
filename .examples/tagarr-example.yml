@@ -6,6 +6,9 @@ general:
   fast_search: true
   # Set your locale, this can be a two letter country code or locale like: es_ES.
   locale: es_ES
+  # Optional: tag to apply to movies/series not available on any configured provider.
+  # If not set, content without providers will be ignored.
+  # not_available_tag: no-streaming
   # A list of providers you have a subscription on. You can get a list of available
   # providers using: `excludarr providers list`
   providers:

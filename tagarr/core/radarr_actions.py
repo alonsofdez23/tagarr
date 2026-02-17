@@ -102,7 +102,7 @@ class RadarrActions:
 
         return None, None
 
-    def get_movies_to_tag(self, providers, fast=True, disable_progress=False):
+    def get_movies_to_tag(self, providers, fast=True, disable_progress=False, not_available_tag=None):
         """Find movies available on streaming providers and return them with provider names."""
         tag_movies = {}
 
@@ -128,30 +128,45 @@ class RadarrActions:
 
                 jw_id, jw_movie_data = self._find_movie(movie, jw_providers, fast)
 
+                matched_providers = []
                 if jw_movie_data:
                     movie_providers = filters.get_jw_providers(jw_movie_data)
                     matched_providers = list(set(movie_providers.keys()) & set(jw_providers.keys()))
 
-                    if matched_providers:
-                        clear_names = [
-                            provider_details["clear_name"].lower()
-                            for provider_id, provider_details in jw_providers.items()
-                            if provider_id in matched_providers
-                        ]
+                if matched_providers:
+                    clear_names = [
+                        provider_details["clear_name"].lower()
+                        for provider_id, provider_details in jw_providers.items()
+                        if provider_id in matched_providers
+                    ]
 
-                        tag_movies.update(
-                            {
-                                radarr_id: {
-                                    "title": title,
-                                    "radarr_object": movie,
-                                    "tmdb_id": tmdb_id,
-                                    "jw_id": jw_id,
-                                    "providers": clear_names,
-                                }
+                    tag_movies.update(
+                        {
+                            radarr_id: {
+                                "title": title,
+                                "radarr_object": movie,
+                                "tmdb_id": tmdb_id,
+                                "jw_id": jw_id,
+                                "providers": clear_names,
                             }
-                        )
+                        }
+                    )
 
-                        logger.debug(f"{title} is streaming on {', '.join(clear_names)}")
+                    logger.debug(f"{title} is streaming on {', '.join(clear_names)}")
+                elif not_available_tag:
+                    tag_movies.update(
+                        {
+                            radarr_id: {
+                                "title": title,
+                                "radarr_object": movie,
+                                "tmdb_id": tmdb_id,
+                                "jw_id": jw_id,
+                                "providers": [not_available_tag],
+                            }
+                        }
+                    )
+
+                    logger.debug(f"{title} is not available on any provider, tagging with '{not_available_tag}'")
 
         return tag_movies
 
@@ -179,7 +194,7 @@ class RadarrActions:
             except Exception as e:
                 logger.error(f"Failed to update tags for {title}: {e}")
 
-    def get_movies_to_clean(self, providers, fast=True, disable_progress=False):
+    def get_movies_to_clean(self, providers, fast=True, disable_progress=False, not_available_tag=None):
         """Find movies with stale streaming provider tags."""
         clean_movies = {}
 
@@ -195,6 +210,12 @@ class RadarrActions:
         jw_providers = filters.get_providers(raw_jw_providers, providers)
         provider_labels = {v["clear_name"].lower() for _, v in jw_providers.items()}
 
+        # Include not_available_tag as a managed label
+        not_available_label = self._sanitize_tag(not_available_tag) if not_available_tag else None
+        managed_labels = set(provider_labels)
+        if not_available_label:
+            managed_labels.add(not_available_label)
+
         logger.debug(
             f"Got the following providers: {', '.join(provider_labels)}"
         )
@@ -206,14 +227,14 @@ class RadarrActions:
                 title = movie["title"]
                 current_tags = movie.get("tags", [])
 
-                # Find which current tags are provider tags
+                # Find which current tags are managed tags (providers + not_available_tag)
                 current_provider_tags = {}
                 for tag_id in current_tags:
                     label = tag_id_to_label.get(tag_id)
-                    if label and label in provider_labels:
+                    if label and label in managed_labels:
                         current_provider_tags[tag_id] = label
 
-                # Skip if movie has no provider tags
+                # Skip if movie has no managed tags
                 if not current_provider_tags:
                     continue
 
@@ -234,12 +255,17 @@ class RadarrActions:
                         if provider_id in matched_providers
                     }
 
-                # Find stale tags (provider tags that no longer apply)
-                stale_tags = {
-                    tag_id: label
-                    for tag_id, label in current_provider_tags.items()
-                    if label not in current_jw_providers
-                }
+                # Find stale tags
+                stale_tags = {}
+                for tag_id, label in current_provider_tags.items():
+                    if label == not_available_label:
+                        # not_available_tag is stale if the movie now has providers
+                        if current_jw_providers:
+                            stale_tags[tag_id] = label
+                    else:
+                        # Provider tags are stale if no longer on that provider
+                        if label not in current_jw_providers:
+                            stale_tags[tag_id] = label
 
                 if stale_tags:
                     clean_movies.update(
@@ -257,6 +283,33 @@ class RadarrActions:
                     )
 
         return clean_movies
+
+    def get_movies_to_purge_tag(self, tag_label):
+        """Find all movies that have a specific tag."""
+        purge_movies = {}
+
+        self._load_tags()
+        sanitized = self._sanitize_tag(tag_label)
+        tag_id = self._tag_cache.get(sanitized)
+
+        if tag_id is None:
+            logger.debug(f"Tag '{sanitized}' does not exist in Radarr, nothing to purge")
+            return purge_movies
+
+        logger.debug(f"Looking for movies with tag '{sanitized}' (ID: {tag_id})")
+        radarr_movies = self.radarr_client.get_movie()
+
+        for movie in radarr_movies:
+            if tag_id in movie.get("tags", []):
+                radarr_id = movie["id"]
+                purge_movies[radarr_id] = {
+                    "title": movie["title"],
+                    "radarr_object": movie,
+                    "tags_removed": [sanitized],
+                    "stale_tag_ids": [tag_id],
+                }
+
+        return purge_movies
 
     def clean_tags(self, movies_with_stale_tags):
         """Remove stale streaming provider tags from movies in Radarr."""

@@ -81,6 +81,10 @@ class Config:
         return self.general_section.get("providers", [])
 
     @property
+    def not_available_tag(self):
+        return self.general_section.get("not_available_tag", None)
+
+    @property
     def fast_search(self):
         return self.general_section.get("fast_search", True)
 

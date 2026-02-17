@@ -162,7 +162,7 @@ class SonarrActions:
         return jw_id, jw_serie_data
 
     def get_series_to_tag(
-        self, providers, fast=True, disable_progress=False, tmdb_api_key=None
+        self, providers, fast=True, disable_progress=False, tmdb_api_key=None, not_available_tag=None
     ):
         """Find series available on streaming providers and return them with provider names.
         Tags are applied at the series level, so all providers from all episodes are aggregated."""
@@ -187,12 +187,10 @@ class SonarrActions:
                     serie, jw_providers, tmdb_api_key, fast
                 )
 
+                all_providers = set()
                 if jw_serie_data:
                     logger.debug(f"Look up season data for {title}")
                     jw_seasons = jw_serie_data.get("seasons", [])
-
-                    # Collect all providers across all episodes of the serie
-                    all_providers = set()
 
                     for jw_season in jw_seasons:
                         jw_season_id = jw_season["id"]
@@ -210,21 +208,34 @@ class SonarrActions:
 
                             all_providers.update(providers_match)
 
-                    if all_providers:
-                        tag_series.update(
-                            {
-                                sonarr_id: {
-                                    "title": title,
-                                    "sonarr_object": serie,
-                                    "jw_id": jw_id,
-                                    "providers": sorted(all_providers),
-                                }
+                if all_providers:
+                    tag_series.update(
+                        {
+                            sonarr_id: {
+                                "title": title,
+                                "sonarr_object": serie,
+                                "jw_id": jw_id,
+                                "providers": sorted(all_providers),
                             }
-                        )
+                        }
+                    )
 
-                        logger.debug(
-                            f"{title} is streaming on {', '.join(sorted(all_providers))}"
-                        )
+                    logger.debug(
+                        f"{title} is streaming on {', '.join(sorted(all_providers))}"
+                    )
+                elif not_available_tag:
+                    tag_series.update(
+                        {
+                            sonarr_id: {
+                                "title": title,
+                                "sonarr_object": serie,
+                                "jw_id": jw_id,
+                                "providers": [not_available_tag],
+                            }
+                        }
+                    )
+
+                    logger.debug(f"{title} is not available on any provider, tagging with '{not_available_tag}'")
 
         return tag_series
 
@@ -253,7 +264,7 @@ class SonarrActions:
                 logger.error(f"Failed to update tags for {title}: {e}")
 
     def get_series_to_clean(
-        self, providers, fast=True, disable_progress=False, tmdb_api_key=None
+        self, providers, fast=True, disable_progress=False, tmdb_api_key=None, not_available_tag=None
     ):
         """Find series with stale streaming provider tags."""
         clean_series = {}
@@ -270,6 +281,12 @@ class SonarrActions:
         jw_providers = filters.get_providers(raw_jw_providers, providers)
         provider_labels = {v["clear_name"].lower() for _, v in jw_providers.items()}
 
+        # Include not_available_tag as a managed label
+        not_available_label = self._sanitize_tag(not_available_tag) if not_available_tag else None
+        managed_labels = set(provider_labels)
+        if not_available_label:
+            managed_labels.add(not_available_label)
+
         logger.debug(
             f"Got the following providers: {', '.join(provider_labels)}"
         )
@@ -281,14 +298,14 @@ class SonarrActions:
                 title = serie["title"]
                 current_tags = serie.get("tags", [])
 
-                # Find which current tags are provider tags
+                # Find which current tags are managed tags (providers + not_available_tag)
                 current_provider_tags = {}
                 for tag_id in current_tags:
                     label = tag_id_to_label.get(tag_id)
-                    if label and label in provider_labels:
+                    if label and label in managed_labels:
                         current_provider_tags[tag_id] = label
 
-                # Skip if serie has no provider tags
+                # Skip if serie has no managed tags
                 if not current_provider_tags:
                     continue
 
@@ -321,12 +338,17 @@ class SonarrActions:
 
                             current_jw_providers.update(providers_match)
 
-                # Find stale tags (provider tags that no longer apply)
-                stale_tags = {
-                    tag_id: label
-                    for tag_id, label in current_provider_tags.items()
-                    if label not in current_jw_providers
-                }
+                # Find stale tags
+                stale_tags = {}
+                for tag_id, label in current_provider_tags.items():
+                    if label == not_available_label:
+                        # not_available_tag is stale if the serie now has providers
+                        if current_jw_providers:
+                            stale_tags[tag_id] = label
+                    else:
+                        # Provider tags are stale if no longer on that provider
+                        if label not in current_jw_providers:
+                            stale_tags[tag_id] = label
 
                 if stale_tags:
                     clean_series.update(
@@ -344,6 +366,33 @@ class SonarrActions:
                     )
 
         return clean_series
+
+    def get_series_to_purge_tag(self, tag_label):
+        """Find all series that have a specific tag."""
+        purge_series = {}
+
+        self._load_tags()
+        sanitized = self._sanitize_tag(tag_label)
+        tag_id = self._tag_cache.get(sanitized)
+
+        if tag_id is None:
+            logger.debug(f"Tag '{sanitized}' does not exist in Sonarr, nothing to purge")
+            return purge_series
+
+        logger.debug(f"Looking for series with tag '{sanitized}' (ID: {tag_id})")
+        sonarr_series = self.sonarr_client.get_series()
+
+        for serie in sonarr_series:
+            if tag_id in serie.get("tags", []):
+                sonarr_id = serie["id"]
+                purge_series[sonarr_id] = {
+                    "title": serie["title"],
+                    "sonarr_object": serie,
+                    "tags_removed": [sanitized],
+                    "stale_tag_ids": [tag_id],
+                }
+
+        return purge_series
 
     def clean_tags(self, series_with_stale_tags):
         """Remove stale streaming provider tags from series in Sonarr."""

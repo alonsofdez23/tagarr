@@ -12,20 +12,20 @@ from tagarr.utils.config import Config
 app = typer.Typer()
 
 
-@app.command(help="Tag movies in Radarr with their streaming provider names")
+@app.command(help="Etiqueta películas en Radarr con sus proveedores de streaming")
 def tag(
     providers: Optional[List[str]] = typer.Option(
         None,
         "-p",
         "--provider",
         metavar="PROVIDER",
-        help="Override the configured streaming providers.",
+        help="Sobrescribe los proveedores de streaming configurados.",
     ),
     locale: Optional[str] = typer.Option(
-        None, "-l", "--locale", metavar="LOCALE", help="Your locale e.g: en_US."
+        None, "-l", "--locale", metavar="LOCALE", help="Tu localización, p. ej: es_ES."
     ),
     progress: bool = typer.Option(
-        False, "--progress", help="Track the progress using a progressbar."
+        False, "--progress", help="Muestra una barra de progreso."
     ),
 ):
     """
@@ -76,20 +76,20 @@ def tag(
         rich.print("No movies found on the configured streaming providers to tag.")
 
 
-@app.command(help="Remove stale streaming provider tags from movies in Radarr")
+@app.command(help="Elimina etiquetas obsoletas de proveedores de streaming en Radarr")
 def clean(
     providers: Optional[List[str]] = typer.Option(
         None,
         "-p",
         "--provider",
         metavar="PROVIDER",
-        help="Override the configured streaming providers.",
+        help="Sobrescribe los proveedores de streaming configurados.",
     ),
     locale: Optional[str] = typer.Option(
-        None, "-l", "--locale", metavar="LOCALE", help="Your locale e.g: en_US."
+        None, "-l", "--locale", metavar="LOCALE", help="Tu localización, p. ej: es_ES."
     ),
     progress: bool = typer.Option(
-        False, "--progress", help="Track the progress using a progressbar."
+        False, "--progress", help="Muestra una barra de progreso."
     ),
 ):
     """

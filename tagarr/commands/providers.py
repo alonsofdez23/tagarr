@@ -9,10 +9,10 @@ from tagarr.utils import output
 app = typer.Typer()
 
 
-@app.command(help="Get all the possible providers for your locale")
+@app.command(help="Muestra todos los proveedores de streaming disponibles para tu localización")
 def list(
     locale: Optional[str] = typer.Option(
-        None, "-l", "--locale", metavar="LOCALE", help="Your locale e.g: en_US."
+        None, "-l", "--locale", metavar="LOCALE", help="Tu localización, p. ej: es_ES."
     )
 ):
     # Check if locale is set on CLI otherwise get the value from the config

@@ -280,7 +280,7 @@ Variable | Por defecto | Descripción
 `TAGARR_HOST` | `user@host` | Usuario y dirección del host donde está instalado Tagarr
 `SSH_KEY` | `/root/.ssh/tagarr_key` | Ruta a la clave SSH privada
 `TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
-`LOGFILE` | `~/.local/log/tagarr-radarr.log` o `~/.local/log/tagarr-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
+`LOGFILE` | `/var/log/tagarr-radarr.log` o `/var/log/tagarr-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
 
 #### Instalación paso a paso
 
@@ -317,10 +317,10 @@ Los scripts escriben un log con cada ejecución. Para comprobar que funcionan:
 
 ```bash
 # En la máquina de Radarr
-cat ~/.local/log/tagarr-radarr.log
+cat /var/log/tagarr-radarr.log
 
 # En la máquina de Sonarr
-cat ~/.local/log/tagarr-sonarr.log
+cat /var/log/tagarr-sonarr.log
 ```
 
 > **Nota:** Asegúrate de que el archivo de configuración de Tagarr (`tagarr.yml`) esté en una ruta global como `~/.config/tagarr/tagarr.yml` en el host de Tagarr, ya que los scripts se ejecutan por SSH y no necesariamente desde el directorio del proyecto.

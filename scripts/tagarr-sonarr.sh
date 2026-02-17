@@ -11,7 +11,7 @@
 TAGARR_HOST="${TAGARR_HOST:-user@host}"
 SSH_KEY="${SSH_KEY:-/root/.ssh/tagarr_key}"
 TAGARR_VENV="${TAGARR_VENV:-}"
-LOGFILE="${LOGFILE:-$HOME/.local/log/tagarr-sonarr.log}"
+LOGFILE="${LOGFILE:-/var/log/tagarr-sonarr.log}"
 
 mkdir -p "$(dirname "$LOGFILE")"
 

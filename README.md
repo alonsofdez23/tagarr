@@ -344,6 +344,7 @@ Variable | Por defecto | Descripción
 `RADARR_URL` | `http://localhost:7878` | URL de la API de Radarr (para el evento Download)
 `RADARR_API_KEY` | *(vacío)* | Clave API de Radarr (necesaria para el evento Download)
 `NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
+`ENABLE_HARDLINKS` | `true` | `false` para solo etiquetar sin crear ni eliminar hardlinks
 
 **`tagarr-sonarr.sh`**
 
@@ -356,6 +357,7 @@ Variable | Por defecto | Descripción
 `SONARR_URL` | `http://localhost:8989` | URL de la API de Sonarr (para el evento Download)
 `SONARR_API_KEY` | *(vacío)* | Clave API de Sonarr (necesaria para el evento Download)
 `NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
+`ENABLE_HARDLINKS` | `true` | `false` para solo etiquetar sin crear ni eliminar hardlinks
 
 #### Instalación paso a paso
 

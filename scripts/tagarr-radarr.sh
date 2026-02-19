@@ -19,6 +19,8 @@ LOGFILE="${LOGFILE:-/var/log/tagarr-radarr.log}"
 RADARR_URL="${RADARR_URL:-http://localhost:7878}"
 RADARR_API_KEY="${RADARR_API_KEY:-}"
 NOT_AVAILABLE_TAG="${NOT_AVAILABLE_TAG:-no-streaming}"
+# Activar hardlinks: crea/elimina hardlinks por proveedor en eventos Download/Delete
+ENABLE_HARDLINKS=true
 
 mkdir -p "$(dirname "$LOGFILE")"
 
@@ -149,14 +151,18 @@ case "$radarr_eventtype" in
             "$TAGARR_CMD radarr tag --id $radarr_movie_id" >> "${LOGFILE:-/dev/null}" 2>&1
         log "Tagging exit code: $?"
         # Crear hardlinks en carpetas de proveedor
-        create_hardlinks "$radarr_movie_id" "$radarr_movie_path" "$radarr_moviefile_path"
+        if [ "$ENABLE_HARDLINKS" = true ]; then
+            create_hardlinks "$radarr_movie_id" "$radarr_movie_path" "$radarr_moviefile_path"
+        fi
         ;;
     MovieFileDelete)
         log "Event: $radarr_eventtype | Movie ID: $radarr_movie_id | File: $radarr_moviefile_path"
-        delete_hardlinks "$radarr_movie_path" "$radarr_moviefile_path" "$radarr_movie_tags"
+        if [ "$ENABLE_HARDLINKS" = true ]; then
+            delete_hardlinks "$radarr_movie_path" "$radarr_moviefile_path" "$radarr_movie_tags"
+        fi
         ;;
     MovieDelete)
-        if [ "$radarr_movie_deletedfiles" = "True" ]; then
+        if [ "$radarr_movie_deletedfiles" = "True" ] && [ "$ENABLE_HARDLINKS" = true ]; then
             log "Event: $radarr_eventtype | Movie ID: $radarr_movie_id | DeletedFiles: True"
             base_path=$(echo "$radarr_movie_path" | sed 's|/movies/.*||')
             movie_folder=$(basename "$radarr_movie_path")

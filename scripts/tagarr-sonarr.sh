@@ -19,6 +19,8 @@ LOGFILE="${LOGFILE:-/var/log/tagarr-sonarr.log}"
 SONARR_URL="${SONARR_URL:-http://localhost:8989}"
 SONARR_API_KEY="${SONARR_API_KEY:-}"
 NOT_AVAILABLE_TAG="${NOT_AVAILABLE_TAG:-no-streaming}"
+# Activar hardlinks: crea/elimina hardlinks por proveedor en eventos Download/Delete
+ENABLE_HARDLINKS=true
 
 mkdir -p "$(dirname "$LOGFILE")"
 
@@ -131,22 +133,26 @@ case "$sonarr_eventtype" in
         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" \
             "$TAGARR_CMD sonarr tag --id $sonarr_series_id" >> "${LOGFILE:-/dev/null}" 2>&1
         log "Tagging exit code: $?"
-        # Obtener tags actualizados desde la API de Sonarr
-        updated_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/series/$sonarr_series_id" \
-            | jq -r '[.tags[] | tostring] | join("|")' 2>/dev/null)
-        # Mapear IDs a nombres
-        all_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/tag")
-        tag_names=$(echo "$updated_tags" | tr '|' '\n' | while read -r tid; do
-            echo "$all_tags" | jq -r ".[] | select(.id == ($tid | tonumber)) | .label"
-        done | paste -sd '|')
-        create_hardlinks "$sonarr_episodefile_path" "$tag_names"
+        if [ "$ENABLE_HARDLINKS" = true ]; then
+            # Obtener tags actualizados desde la API de Sonarr
+            updated_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/series/$sonarr_series_id" \
+                | jq -r '[.tags[] | tostring] | join("|")' 2>/dev/null)
+            # Mapear IDs a nombres
+            all_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/tag")
+            tag_names=$(echo "$updated_tags" | tr '|' '\n' | while read -r tid; do
+                echo "$all_tags" | jq -r ".[] | select(.id == ($tid | tonumber)) | .label"
+            done | paste -sd '|')
+            create_hardlinks "$sonarr_episodefile_path" "$tag_names"
+        fi
         ;;
     EpisodeFileDelete)
         log "Event: $sonarr_eventtype | Series ID: $sonarr_series_id | File: $sonarr_episodefile_path"
-        delete_episode_hardlinks "$sonarr_episodefile_path" "$sonarr_series_tags"
+        if [ "$ENABLE_HARDLINKS" = true ]; then
+            delete_episode_hardlinks "$sonarr_episodefile_path" "$sonarr_series_tags"
+        fi
         ;;
     SeriesDelete)
-        if [ "$sonarr_series_deletedfiles" = "True" ]; then
+        if [ "$sonarr_series_deletedfiles" = "True" ] && [ "$ENABLE_HARDLINKS" = true ]; then
             log "Event: $sonarr_eventtype | Series ID: $sonarr_series_id | DeletedFiles: True"
             parse_series_path
             streaming_base="$base_path/streaming"

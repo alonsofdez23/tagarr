@@ -460,27 +460,24 @@ Los Custom Scripts solo etiquetan elementos nuevos cuando se añaden. Para mante
 
 El repositorio incluye scripts de cron listos para usar:
 
-- `scripts/cron-radarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Radarr
-- `scripts/cron-sonarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Sonarr
+- `scripts/cron-radarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Radarr (en el host de Tagarr)
+- `scripts/cron-sonarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Sonarr (en el host de Tagarr)
+- `scripts/cron-radarr-hardlinks.sh` — Re-etiqueta, limpia y reconcilia hardlinks de Radarr (en el LXC de Radarr)
+- `scripts/cron-sonarr-hardlinks.sh` — Re-etiqueta, limpia y reconcilia hardlinks de Sonarr (en el LXC de Sonarr)
 
-#### Configuración
+#### Scripts en el host de Tagarr (`cron-radarr.sh` / `cron-sonarr.sh`)
 
-Los scripts se configuran con las siguientes variables de entorno (también se pueden editar directamente en el script):
+Solo etiquetan y limpian. Útiles si no usas los Custom Scripts con hardlinks.
 
 Variable | Por defecto | Descripción
 --- | --- | ---
 `TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
-`LOGFILE` | `~/.local/log/tagarr-cron-radarr.log` o `~/.local/log/tagarr-cron-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
-
-#### Instalación
-
-Añade las entradas al crontab del host donde está instalado Tagarr:
+`LOGFILE` | `~/.local/log/tagarr-cron-radarr.log` o `~/.local/log/tagarr-cron-sonarr.log` | Ruta al archivo de log
 
 ```bash
+# En el host de Tagarr
 crontab -e
-```
 
-```bash
 # Radarr: cada día a las 3:00
 0 3 * * * TAGARR_VENV=/ruta/al/venv /ruta/a/scripts/cron-radarr.sh
 
@@ -488,22 +485,70 @@ crontab -e
 0 4 * * * TAGARR_VENV=/ruta/al/venv /ruta/a/scripts/cron-sonarr.sh
 ```
 
+#### Scripts en el LXC (`cron-radarr-hardlinks.sh` / `cron-sonarr-hardlinks.sh`)
+
+Re-etiquetan, limpian y reconcilian hardlinks completos. Recomendados si usas hardlinks por proveedor.
+
+**`cron-radarr-hardlinks.sh`**
+
+Variable | Por defecto | Descripción
+--- | --- | ---
+`TAGARR_HOST` | `user@host` | Usuario y dirección del host donde está instalado Tagarr
+`SSH_KEY` | `/root/.ssh/tagarr_key` | Ruta a la clave SSH privada
+`TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr en el host remoto
+`RADARR_URL` | `http://localhost:7878` | URL de la API de Radarr
+`RADARR_API_KEY` | *(vacío)* | Clave API de Radarr
+`NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
+`LOGFILE` | `/var/log/tagarr-cron-hardlinks.log` | Ruta al archivo de log
+
+**`cron-sonarr-hardlinks.sh`**
+
+Variable | Por defecto | Descripción
+--- | --- | ---
+`TAGARR_HOST` | `user@host` | Usuario y dirección del host donde está instalado Tagarr
+`SSH_KEY` | `/root/.ssh/tagarr_key` | Ruta a la clave SSH privada
+`TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr en el host remoto
+`SONARR_URL` | `http://localhost:8989` | URL de la API de Sonarr
+`SONARR_API_KEY` | *(vacío)* | Clave API de Sonarr
+`NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
+`LOGFILE` | `/var/log/tagarr-sonarr-hardlinks.log` | Ruta al archivo de log
+
+```bash
+# En el LXC de Radarr
+crontab -e
+0 5 * * * /usr/local/bin/cron-radarr-hardlinks.sh
+
+# En el LXC de Sonarr
+crontab -e
+0 6 * * * /usr/local/bin/cron-sonarr-hardlinks.sh
+```
+
 #### Verificación
 
 ```bash
+# En el host de Tagarr
 cat ~/.local/log/tagarr-cron-radarr.log
-cat ~/.local/log/tagarr-cron-sonarr.log
+
+# En el LXC de Radarr
+cat /var/log/tagarr-cron-hardlinks.log
+
+# En el LXC de Sonarr
+cat /var/log/tagarr-sonarr-hardlinks.log
 ```
 
-Ejemplo de salida:
+Ejemplo de salida del cron de hardlinks:
 
 ```
-[Mon Feb 17 03:00:01 UTC 2026] Inicio: tagarr radarr tag
-Successfully tagged 5 movies in Radarr!
-[Mon Feb 17 03:01:30 UTC 2026] Exit code: 0
-[Mon Feb 17 03:01:30 UTC 2026] Inicio: tagarr radarr clean
-Successfully cleaned tags from 2 movies in Radarr!
-[Mon Feb 17 03:02:45 UTC 2026] Exit code: 0
+[Mon Feb 17 05:00:01 UTC 2026] === Inicio sincronización de hardlinks ===
+[Mon Feb 17 05:00:01 UTC 2026] Re-etiquetando biblioteca...
+Successfully tagged 3 series in Sonarr!
+[Mon Feb 17 05:00:45 UTC 2026] Tagging exit code: 0
+[Mon Feb 17 05:00:45 UTC 2026] Limpiando tags obsoletos...
+[Mon Feb 17 05:00:50 UTC 2026] Clean exit code: 0
+[Mon Feb 17 05:00:50 UTC 2026] Procesando 42 series...
+[Mon Feb 17 05:01:12 UTC 2026] Hardlink añadido: /mnt/arrstack/streaming/netflix/tvseries/Yellowstone (2018) [...]/Season 02/S02E01.mkv
+[Mon Feb 17 05:01:15 UTC 2026] Hardlink obsoleto eliminado: /mnt/arrstack/streaming/skyshowtime/tvseries/Yellowstone (2018) [...]/Season 01/S01E01.mkv
+[Mon Feb 17 05:01:15 UTC 2026] === Sincronización completada ===
 ```
 
 ## Docker

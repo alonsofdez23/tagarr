@@ -513,14 +513,30 @@ Variable | Por defecto | Descripción
 `NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
 `LOGFILE` | `/var/log/tagarr-sonarr-hardlinks.log` | Ruta al archivo de log
 
+Ambos scripts aceptan el flag `--hardlinks` para activar la reconciliación de hardlinks además del etiquetado:
+
+```bash
+# Solo etiquetado (tag + clean via SSH)
+/usr/local/bin/cron-radarr-hardlinks.sh
+
+# Etiquetado + reconciliación de hardlinks
+/usr/local/bin/cron-radarr-hardlinks.sh --hardlinks
+```
+
 ```bash
 # En el LXC de Radarr
 crontab -e
-0 5 * * * /usr/local/bin/cron-radarr-hardlinks.sh
+# Etiquetado diario a las 3:00
+0 3 * * * /usr/local/bin/cron-radarr-hardlinks.sh
+# Reconciliación de hardlinks semanal los domingos a las 5:00
+0 5 * * 0 /usr/local/bin/cron-radarr-hardlinks.sh --hardlinks
 
 # En el LXC de Sonarr
 crontab -e
-0 6 * * * /usr/local/bin/cron-sonarr-hardlinks.sh
+# Etiquetado diario a las 4:00
+0 4 * * * /usr/local/bin/cron-sonarr-hardlinks.sh
+# Reconciliación de hardlinks semanal los domingos a las 6:00
+0 6 * * 0 /usr/local/bin/cron-sonarr-hardlinks.sh --hardlinks
 ```
 
 #### Verificación

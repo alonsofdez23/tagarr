@@ -1,9 +1,14 @@
 #!/bin/bash
-# Cron script para sincronizar hardlinks de Sonarr con los providers actuales.
+# Cron script para sincronizar Sonarr con los providers actuales.
 # Ejecutar en el LXC de Sonarr.
 #
-# Ejemplo de crontab (ejecutar cada día a las 6:00):
-#   0 6 * * * /usr/local/bin/cron-sonarr-hardlinks.sh
+# Modos de uso:
+#   cron-sonarr-hardlinks.sh              → solo etiquetado (tag + clean via SSH)
+#   cron-sonarr-hardlinks.sh --hardlinks  → etiquetado + reconciliación de hardlinks
+#
+# Ejemplo de crontab:
+#   0 4 * * * /usr/local/bin/cron-sonarr-hardlinks.sh
+#   0 6 * * * /usr/local/bin/cron-sonarr-hardlinks.sh --hardlinks
 #
 # Configuración:
 #   TAGARR_HOST       - usuario@host donde está instalado tagarr
@@ -22,6 +27,15 @@ SONARR_API_KEY="${SONARR_API_KEY:-}"
 NOT_AVAILABLE_TAG="${NOT_AVAILABLE_TAG:-no-streaming}"
 LOGFILE="${LOGFILE:-/var/log/tagarr-sonarr-hardlinks.log}"
 
+# Parse argumentos
+HARDLINKS=false
+for arg in "$@"; do
+    case "$arg" in
+        --hardlinks) HARDLINKS=true ;;
+        *) echo "Uso: $(basename "$0") [--hardlinks]" >&2; exit 1 ;;
+    esac
+done
+
 mkdir -p "$(dirname "$LOGFILE")"
 
 if [ -n "$TAGARR_VENV" ]; then
@@ -34,7 +48,7 @@ log() {
     [ -n "$LOGFILE" ] && echo "[$(date)] $1" >> "$LOGFILE"
 }
 
-log "=== Inicio sincronización de hardlinks ==="
+log "=== Inicio sincronización$([ "$HARDLINKS" = true ] && echo ' + hardlinks') ==="
 
 # 1. Re-etiquetar toda la biblioteca via SSH
 log "Re-etiquetando biblioteca..."
@@ -47,6 +61,11 @@ log "Limpiando tags obsoletos..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" \
     "$TAGARR_CMD sonarr clean" >> "${LOGFILE:-/dev/null}" 2>&1
 log "Clean exit code: $?"
+
+if [ "$HARDLINKS" = false ]; then
+    log "=== Sincronización completada ==="
+    exit 0
+fi
 
 # 3. Obtener todos los tags de Sonarr (id -> nombre)
 all_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/tag")

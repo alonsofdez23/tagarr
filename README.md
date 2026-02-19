@@ -282,11 +282,20 @@ El script de Radarr (`tagarr-radarr.sh`) responde a los siguientes eventos:
 | `MovieFileDelete` | On Movie File Delete | Elimina el hardlink del archivo borrado en todas las carpetas de proveedor |
 | `MovieDelete` | On Movie Delete | Si se borraron los archivos, elimina la carpeta de la película en todas las carpetas de proveedor |
 
-El script de Sonarr (`tagarr-sonarr.sh`) solo responde al evento `SeriesAdd` (On Series Add) para etiquetar la serie.
+El script de Sonarr (`tagarr-sonarr.sh`) responde a los siguientes eventos:
 
-##### Hardlinks por proveedor (solo Radarr)
+| Evento | Trigger en Sonarr | Acción |
+| --- | --- | --- |
+| `SeriesAdd` | On Series Add | Etiqueta la serie con sus proveedores de streaming |
+| `Download` | On Download | Re-etiqueta la serie y crea **hardlinks** en carpetas por proveedor |
+| `EpisodeFileDelete` | On Episode File Delete | Elimina el hardlink del episodio borrado en todas las carpetas de proveedor |
+| `SeriesDelete` | On Series Delete | Si se borraron los archivos, elimina la carpeta de la serie en todas las carpetas de proveedor |
 
-En el evento `Download`, el script crea automáticamente hardlinks del archivo descargado en carpetas nombradas según el proveedor de streaming. La estructura resultante es:
+##### Hardlinks por proveedor
+
+En el evento `Download`, ambos scripts crean automáticamente hardlinks del archivo descargado en carpetas nombradas según el proveedor de streaming.
+
+Estructura para películas (Radarr):
 
 ```
 /mnt/arrstack/streaming/
@@ -300,9 +309,25 @@ En el evento `Download`, el script crea automáticamente hardlinks del archivo d
             └── Película (2025).mkv  → hardlink
 ```
 
-La ruta base (`/mnt/arrstack/`) se extrae automáticamente de la ruta de la película. Los hardlinks solo se crean si la película está disponible en al menos un proveedor — si solo tiene la etiqueta `not_available_tag` no se crea ningún hardlink.
+Estructura para series (Sonarr):
 
-> **Nota:** Los hardlinks requieren que la carpeta `streaming/` esté en el mismo sistema de archivos que la biblioteca de películas. Si Radarr escanea esa carpeta, añádela a la lista de carpetas excluidas en Settings > Media Management.
+```
+/mnt/arrstack/streaming/
+├── netflix/
+│   └── tvseries/
+│       └── Yellowstone (2018) [tvdbid-341164]/
+│           └── Season 01/
+│               └── Yellowstone S01E01.mkv  → hardlink
+└── amazon-prime-video/
+    └── anime/
+        └── Death Note [tvdbid-79481]/
+            └── Season 01/
+                └── Death Note S01E01.mkv  → hardlink
+```
+
+El script de Sonarr detecta automáticamente el tipo de carpeta raíz (`tvseries`, `anime`, etc.) a partir de la ruta de la serie, sin necesidad de configuración adicional. La ruta base (`/mnt/arrstack/`) se extrae automáticamente. Los hardlinks solo se crean si el contenido está disponible en al menos un proveedor — si solo tiene la etiqueta `not_available_tag` no se crea ningún hardlink.
+
+> **Nota:** Los hardlinks requieren que la carpeta `streaming/` esté en el mismo sistema de archivos que la biblioteca. Si Radarr/Sonarr escanea esa carpeta, añádela a la lista de carpetas excluidas en Settings > Media Management.
 
 #### Configuración
 
@@ -328,6 +353,9 @@ Variable | Por defecto | Descripción
 `SSH_KEY` | `/root/.ssh/tagarr_key` | Ruta a la clave SSH privada
 `TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
 `LOGFILE` | `/var/log/tagarr-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
+`SONARR_URL` | `http://localhost:8989` | URL de la API de Sonarr (para el evento Download)
+`SONARR_API_KEY` | *(vacío)* | Clave API de Sonarr (necesaria para el evento Download)
+`NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
 
 #### Instalación paso a paso
 
@@ -357,7 +385,7 @@ RADARR_API_KEY="${RADARR_API_KEY:-tu_api_key}"  # Solo en tagarr-radarr.sh
    - Ve a Settings > Connect > + > Custom Script
    - Path: `/usr/local/bin/tagarr-radarr.sh` (o `tagarr-sonarr.sh`)
    - Triggers Radarr: marca **"On Movie Added"**, **"On Download"**, **"On Movie File Delete"** y **"On Movie Delete"**
-   - Triggers Sonarr: marca **"On Series Add"**
+   - Triggers Sonarr: marca **"On Series Add"**, **"On Download"**, **"On Episode File Delete"** y **"On Series Delete"**
    - Pulsa "Test" para verificar la conexión SSH
 
 #### Verificación
@@ -404,6 +432,24 @@ Ejemplo al eliminar una película con sus archivos:
 ```
 [Thu Feb 19 17:28:55 CET 2026] Event: MovieDelete | Movie ID: 84 | DeletedFiles: True
 [Thu Feb 19 17:28:55 CET 2026] Carpeta eliminada: /mnt/arrstack/streaming/apple-tv/movies/F1 (2025) [tmdbid-911430]
+```
+
+Ejemplo de salida de Sonarr al descargar episodios (en la máquina de Sonarr):
+
+```
+[Thu Feb 19 19:37:12 CET 2026] Event: Download | Series ID: 19 | File: /mnt/arrstack/tvseries/Yellowstone (2018) [tvdbid-341164]/Season 01/Yellowstone S01E01.mkv
+Successfully tagged 1 series in Sonarr!
+[Thu Feb 19 19:37:13 CET 2026] Tagging exit code: 0
+[Thu Feb 19 19:37:13 CET 2026] Hardlink creado: /mnt/arrstack/streaming/netflix/tvseries/Yellowstone (2018) [tvdbid-341164]/Season 01/Yellowstone S01E01.mkv
+[Thu Feb 19 19:37:13 CET 2026] Hardlink creado: /mnt/arrstack/streaming/amazon-prime-video/tvseries/Yellowstone (2018) [tvdbid-341164]/Season 01/Yellowstone S01E01.mkv
+```
+
+Ejemplo al borrar un episodio:
+
+```
+[Thu Feb 19 19:50:01 CET 2026] Event: EpisodeFileDelete | Series ID: 19 | File: /mnt/arrstack/tvseries/Yellowstone (2018) [tvdbid-341164]/Season 01/Yellowstone S01E01.mkv
+[Thu Feb 19 19:50:01 CET 2026] Hardlink eliminado: /mnt/arrstack/streaming/netflix/tvseries/Yellowstone (2018) [tvdbid-341164]/Season 01/Yellowstone S01E01.mkv
+[Thu Feb 19 19:50:01 CET 2026] Carpeta vacía eliminada: /mnt/arrstack/streaming/netflix/tvseries/Yellowstone (2018) [tvdbid-341164]/Season 01
 ```
 
 > **Nota:** Asegúrate de que el archivo de configuración de Tagarr (`tagarr.yml`) esté en una ruta global como `~/.config/tagarr/tagarr.yml` en el host de Tagarr, ya que los scripts se ejecutan por SSH y no necesariamente desde el directorio del proyecto.

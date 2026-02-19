@@ -273,12 +273,14 @@ Los scripts se conectan por **SSH** al host donde está instalado Tagarr, lo que
 
 ##### Eventos y acciones
 
-El script de Radarr (`tagarr-radarr.sh`) responde a dos eventos:
+El script de Radarr (`tagarr-radarr.sh`) responde a los siguientes eventos:
 
 | Evento | Trigger en Radarr | Acción |
 | --- | --- | --- |
 | `MovieAdded` | On Movie Added | Etiqueta la película con sus proveedores de streaming |
 | `Download` | On Download | Re-etiqueta la película y crea **hardlinks** en carpetas por proveedor |
+| `MovieFileDelete` | On Movie File Delete | Elimina el hardlink del archivo borrado en todas las carpetas de proveedor |
+| `MovieDelete` | On Movie Delete | Si se borraron los archivos, elimina la carpeta de la película en todas las carpetas de proveedor |
 
 El script de Sonarr (`tagarr-sonarr.sh`) solo responde al evento `SeriesAdd` (On Series Add) para etiquetar la serie.
 
@@ -354,7 +356,7 @@ RADARR_API_KEY="${RADARR_API_KEY:-tu_api_key}"  # Solo en tagarr-radarr.sh
 4. **Configura el Custom Script** en Radarr/Sonarr:
    - Ve a Settings > Connect > + > Custom Script
    - Path: `/usr/local/bin/tagarr-radarr.sh` (o `tagarr-sonarr.sh`)
-   - Triggers Radarr: marca **"On Movie Added"** y **"On Download"**
+   - Triggers Radarr: marca **"On Movie Added"**, **"On Download"**, **"On Movie File Delete"** y **"On Movie Delete"**
    - Triggers Sonarr: marca **"On Series Add"**
    - Pulsa "Test" para verificar la conexión SSH
 
@@ -387,6 +389,21 @@ Successfully tagged 1 movies in Radarr!
 [Thu Feb 19 16:09:13 CET 2026] Tagging exit code: 0
 [Thu Feb 19 16:09:13 CET 2026] Etiqueta 'no-streaming' omitida (not_available_tag)
 [Thu Feb 19 16:09:13 CET 2026] No hay providers de streaming, no se crean hardlinks
+```
+
+Ejemplo al borrar un archivo de película:
+
+```
+[Thu Feb 19 16:47:44 CET 2026] Event: MovieFileDelete | Movie ID: 54 | File: /mnt/arrstack/movies/The Batman.../The Batman.mkv
+[Thu Feb 19 16:47:44 CET 2026] Hardlink eliminado: /mnt/arrstack/streaming/netflix/movies/The Batman [...]/The Batman.mkv
+[Thu Feb 19 16:47:44 CET 2026] Carpeta vacía eliminada: /mnt/arrstack/streaming/netflix/movies/The Batman [...]
+```
+
+Ejemplo al eliminar una película con sus archivos:
+
+```
+[Thu Feb 19 17:28:55 CET 2026] Event: MovieDelete | Movie ID: 84 | DeletedFiles: True
+[Thu Feb 19 17:28:55 CET 2026] Carpeta eliminada: /mnt/arrstack/streaming/apple-tv/movies/F1 (2025) [tmdbid-911430]
 ```
 
 > **Nota:** Asegúrate de que el archivo de configuración de Tagarr (`tagarr.yml`) esté en una ruta global como `~/.config/tagarr/tagarr.yml` en el host de Tagarr, ya que los scripts se ejecutan por SSH y no necesariamente desde el directorio del proyecto.

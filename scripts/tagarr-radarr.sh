@@ -92,6 +92,49 @@ create_hardlinks() {
     fi
 }
 
+delete_hardlinks() {
+    local movie_path="$1"   # /mnt/arrstack/movies/The Batman (2022) [tmdbid-414906]
+    local file_path="$2"    # /mnt/arrstack/movies/The Batman (2022) [...].mkv
+    local movie_tags="$3"   # amazon-prime-video|hbo-max|netflix (separados por |)
+
+    local base_path
+    base_path=$(echo "$movie_path" | sed 's|/movies/.*||')
+
+    local movie_folder
+    movie_folder=$(basename "$movie_path")
+
+    local filename
+    filename=$(basename "$file_path")
+
+    if [ -z "$movie_tags" ]; then
+        log "La película no tiene etiquetas, no hay hardlinks que eliminar"
+        return
+    fi
+
+    IFS='|' read -ra tags <<< "$movie_tags"
+    for tag_name in "${tags[@]}"; do
+        if [ -z "$tag_name" ] || [ "$tag_name" = "$NOT_AVAILABLE_TAG" ]; then
+            continue
+        fi
+
+        local hardlink="$base_path/streaming/$tag_name/movies/$movie_folder/$filename"
+
+        if [ -f "$hardlink" ]; then
+            rm "$hardlink"
+            log "Hardlink eliminado: $hardlink"
+
+            # Eliminar la carpeta de la película si quedó vacía
+            local movie_dir="$base_path/streaming/$tag_name/movies/$movie_folder"
+            if [ -z "$(ls -A "$movie_dir" 2>/dev/null)" ]; then
+                rmdir "$movie_dir"
+                log "Carpeta vacía eliminada: $movie_dir"
+            fi
+        else
+            log "Hardlink no encontrado: $hardlink"
+        fi
+    done
+}
+
 case "$radarr_eventtype" in
     MovieAdded)
         log "Event: $radarr_eventtype | Movie ID: $radarr_movie_id"
@@ -107,6 +150,32 @@ case "$radarr_eventtype" in
         log "Tagging exit code: $?"
         # Crear hardlinks en carpetas de proveedor
         create_hardlinks "$radarr_movie_id" "$radarr_movie_path" "$radarr_moviefile_path"
+        ;;
+    MovieFileDelete)
+        log "Event: $radarr_eventtype | Movie ID: $radarr_movie_id | File: $radarr_moviefile_path"
+        delete_hardlinks "$radarr_movie_path" "$radarr_moviefile_path" "$radarr_movie_tags"
+        ;;
+    MovieDelete)
+        if [ "$radarr_movie_deletedfiles" = "True" ]; then
+            log "Event: $radarr_eventtype | Movie ID: $radarr_movie_id | DeletedFiles: True"
+            base_path=$(echo "$radarr_movie_path" | sed 's|/movies/.*||')
+            movie_folder=$(basename "$radarr_movie_path")
+
+            IFS='|' read -ra tags <<< "$radarr_movie_tags"
+            for tag_name in "${tags[@]}"; do
+                if [ -z "$tag_name" ] || [ "$tag_name" = "$NOT_AVAILABLE_TAG" ]; then
+                    continue
+                fi
+
+                movie_dir="$base_path/streaming/$tag_name/movies/$movie_folder"
+                if [ -d "$movie_dir" ]; then
+                    rm -rf "$movie_dir"
+                    log "Carpeta eliminada: $movie_dir"
+                else
+                    log "Carpeta no encontrada: $movie_dir"
+                fi
+            done
+        fi
         ;;
     Test)
         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" "echo 'Tagarr Radarr: test OK'"

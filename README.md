@@ -267,20 +267,65 @@ El repositorio incluye scripts listos para usar en la carpeta `scripts/`:
 
 #### Cómo funcionan
 
-Radarr y Sonarr permiten ejecutar scripts personalizados en respuesta a eventos (Settings > Connect > Custom Script). Cuando ocurre un evento como añadir una película o completar una descarga, pasan el ID del elemento como variable de entorno (`radarr_movie_id` / `sonarr_series_id`). Los scripts de Tagarr usan ese ID con la opción `--id` para etiquetar solo ese elemento.
+Radarr y Sonarr permiten ejecutar scripts personalizados en respuesta a eventos (Settings > Connect > Custom Script). Cuando ocurre un evento, pasan el ID del elemento como variable de entorno (`radarr_movie_id` / `sonarr_series_id`). Los scripts de Tagarr usan ese ID con la opción `--id` para etiquetar solo ese elemento.
 
 Los scripts se conectan por **SSH** al host donde está instalado Tagarr, lo que permite usarlos cuando Radarr/Sonarr se ejecutan en máquinas o contenedores diferentes (p. ej. LXC de Proxmox).
 
+##### Eventos y acciones
+
+El script de Radarr (`tagarr-radarr.sh`) responde a dos eventos:
+
+| Evento | Trigger en Radarr | Acción |
+| --- | --- | --- |
+| `MovieAdded` | On Movie Added | Etiqueta la película con sus proveedores de streaming |
+| `Download` | On Download | Re-etiqueta la película y crea **hardlinks** en carpetas por proveedor |
+
+El script de Sonarr (`tagarr-sonarr.sh`) solo responde al evento `SeriesAdd` (On Series Add) para etiquetar la serie.
+
+##### Hardlinks por proveedor (solo Radarr)
+
+En el evento `Download`, el script crea automáticamente hardlinks del archivo descargado en carpetas nombradas según el proveedor de streaming. La estructura resultante es:
+
+```
+/mnt/arrstack/streaming/
+├── netflix/
+│   └── movies/
+│       └── Película (2025) [tmdbid-123]/
+│           └── Película (2025).mkv  → hardlink
+└── amazon-prime-video/
+    └── movies/
+        └── Película (2025) [tmdbid-123]/
+            └── Película (2025).mkv  → hardlink
+```
+
+La ruta base (`/mnt/arrstack/`) se extrae automáticamente de la ruta de la película. Los hardlinks solo se crean si la película está disponible en al menos un proveedor — si solo tiene la etiqueta `not_available_tag` no se crea ningún hardlink.
+
+> **Nota:** Los hardlinks requieren que la carpeta `streaming/` esté en el mismo sistema de archivos que la biblioteca de películas. Si Radarr escanea esa carpeta, añádela a la lista de carpetas excluidas en Settings > Media Management.
+
 #### Configuración
 
-Los scripts se configuran con las siguientes variables de entorno (también se pueden editar directamente en el script):
+Los scripts se configuran editando directamente las variables al inicio del script:
+
+**`tagarr-radarr.sh`**
 
 Variable | Por defecto | Descripción
 --- | --- | ---
 `TAGARR_HOST` | `user@host` | Usuario y dirección del host donde está instalado Tagarr
 `SSH_KEY` | `/root/.ssh/tagarr_key` | Ruta a la clave SSH privada
 `TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
-`LOGFILE` | `/var/log/tagarr-radarr.log` o `/var/log/tagarr-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
+`LOGFILE` | `/var/log/tagarr-radarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
+`RADARR_URL` | `http://localhost:7878` | URL de la API de Radarr (para el evento Download)
+`RADARR_API_KEY` | *(vacío)* | Clave API de Radarr (necesaria para el evento Download)
+`NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
+
+**`tagarr-sonarr.sh`**
+
+Variable | Por defecto | Descripción
+--- | --- | ---
+`TAGARR_HOST` | `user@host` | Usuario y dirección del host donde está instalado Tagarr
+`SSH_KEY` | `/root/.ssh/tagarr_key` | Ruta a la clave SSH privada
+`TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
+`LOGFILE` | `/var/log/tagarr-sonarr.log` | Ruta al archivo de log (dejar vacío para desactivar)
 
 #### Instalación paso a paso
 
@@ -298,17 +343,19 @@ scp scripts/tagarr-radarr.sh root@host-radarr:/usr/local/bin/tagarr-radarr.sh
 scp scripts/tagarr-sonarr.sh root@host-sonarr:/usr/local/bin/tagarr-sonarr.sh
 ```
 
-3. **Configura las variables** editando el script o exportándolas en el entorno:
+3. **Edita las variables** en cada script con tus valores:
 
 ```bash
-export TAGARR_HOST="usuario@192.168.1.100"
-export TAGARR_VENV="/home/usuario/tagarr/venv"
+TAGARR_HOST="${TAGARR_HOST:-usuario@192.168.1.100}"
+TAGARR_VENV="${TAGARR_VENV:-/home/usuario/tagarr/venv}"
+RADARR_API_KEY="${RADARR_API_KEY:-tu_api_key}"  # Solo en tagarr-radarr.sh
 ```
 
 4. **Configura el Custom Script** en Radarr/Sonarr:
    - Ve a Settings > Connect > + > Custom Script
    - Path: `/usr/local/bin/tagarr-radarr.sh` (o `tagarr-sonarr.sh`)
-   - Triggers: marca "On Movie Added" (Radarr) o "On Series Add" (Sonarr)
+   - Triggers Radarr: marca **"On Movie Added"** y **"On Download"**
+   - Triggers Sonarr: marca **"On Series Add"**
    - Pulsa "Test" para verificar la conexión SSH
 
 #### Verificación
@@ -321,6 +368,25 @@ cat /var/log/tagarr-radarr.log
 
 # En la máquina de Sonarr
 cat /var/log/tagarr-sonarr.log
+```
+
+Ejemplo de salida para una película disponible en Netflix:
+
+```
+[Thu Feb 19 16:09:12 CET 2026] Event: Download | Movie ID: 42 | File: /mnt/arrstack/movies/...
+Successfully tagged 1 movies in Radarr!
+[Thu Feb 19 16:09:13 CET 2026] Tagging exit code: 0
+[Thu Feb 19 16:09:13 CET 2026] Hardlink creado: /mnt/arrstack/streaming/netflix/movies/Película (2025) [...]/Película.mkv
+```
+
+Ejemplo para una película sin proveedores:
+
+```
+[Thu Feb 19 16:09:12 CET 2026] Event: Download | Movie ID: 82 | File: /mnt/arrstack/movies/...
+Successfully tagged 1 movies in Radarr!
+[Thu Feb 19 16:09:13 CET 2026] Tagging exit code: 0
+[Thu Feb 19 16:09:13 CET 2026] Etiqueta 'no-streaming' omitida (not_available_tag)
+[Thu Feb 19 16:09:13 CET 2026] No hay providers de streaming, no se crean hardlinks
 ```
 
 > **Nota:** Asegúrate de que el archivo de configuración de Tagarr (`tagarr.yml`) esté en una ruta global como `~/.config/tagarr/tagarr.yml` en el host de Tagarr, ya que los scripts se ejecutan por SSH y no necesariamente desde el directorio del proyecto.

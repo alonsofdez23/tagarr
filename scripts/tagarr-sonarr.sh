@@ -87,6 +87,26 @@ create_hardlinks() {
     fi
 }
 
+create_nfo() {
+    local series_path="$1"
+    local tag_names="$2"  # nombres separados por |
+
+    local nfo_file="$series_path/tvshow.nfo"
+
+    {
+        echo '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'
+        echo '<tvshow>'
+        IFS='|' read -ra tags <<< "$tag_names"
+        for tag_name in "${tags[@]}"; do
+            [ -n "$tag_name" ] && [ "$tag_name" != "$NOT_AVAILABLE_TAG" ] && \
+                echo "  <tag>$tag_name</tag>"
+        done
+        echo '</tvshow>'
+    } > "$nfo_file"
+
+    log "NFO creado: $nfo_file"
+}
+
 delete_episode_hardlinks() {
     local file_path="$1"    # /mnt/arrstack/tvseries/Fallout.../Season 01/episodio.mkv
     local series_tags="$2"  # amazon-prime-video|netflix (separados por |)
@@ -126,6 +146,14 @@ case "$sonarr_eventtype" in
         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" \
             "$TAGARR_CMD sonarr tag --id $sonarr_series_id" >> "${LOGFILE:-/dev/null}" 2>&1
         log "Exit code: $?"
+        # Obtener tags asignados y crear tvshow.nfo en la carpeta de la serie
+        updated_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/series/$sonarr_series_id" \
+            | jq -r '[.tags[] | tostring] | join("|")' 2>/dev/null)
+        all_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/tag")
+        tag_names=$(echo "$updated_tags" | tr '|' '\n' | while read -r tid; do
+            echo "$all_tags" | jq -r ".[] | select(.id == ($tid | tonumber)) | .label"
+        done | paste -sd '|')
+        create_nfo "$sonarr_series_path" "$tag_names"
         ;;
     Download)
         log "Event: $sonarr_eventtype | Series ID: $sonarr_series_id | File: $sonarr_episodefile_path"
@@ -133,15 +161,17 @@ case "$sonarr_eventtype" in
         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" \
             "$TAGARR_CMD sonarr tag --id $sonarr_series_id" >> "${LOGFILE:-/dev/null}" 2>&1
         log "Tagging exit code: $?"
+        # Obtener tags actualizados desde la API de Sonarr
+        updated_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/series/$sonarr_series_id" \
+            | jq -r '[.tags[] | tostring] | join("|")' 2>/dev/null)
+        # Mapear IDs a nombres
+        all_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/tag")
+        tag_names=$(echo "$updated_tags" | tr '|' '\n' | while read -r tid; do
+            echo "$all_tags" | jq -r ".[] | select(.id == ($tid | tonumber)) | .label"
+        done | paste -sd '|')
+        # Actualizar tvshow.nfo con los providers actuales
+        create_nfo "$sonarr_series_path" "$tag_names"
         if [ "$ENABLE_HARDLINKS" = true ]; then
-            # Obtener tags actualizados desde la API de Sonarr
-            updated_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/series/$sonarr_series_id" \
-                | jq -r '[.tags[] | tostring] | join("|")' 2>/dev/null)
-            # Mapear IDs a nombres
-            all_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/tag")
-            tag_names=$(echo "$updated_tags" | tr '|' '\n' | while read -r tid; do
-                echo "$all_tags" | jq -r ".[] | select(.id == ($tid | tonumber)) | .label"
-            done | paste -sd '|')
             create_hardlinks "$sonarr_episodefile_path" "$tag_names"
         fi
         ;;

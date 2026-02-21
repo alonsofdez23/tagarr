@@ -462,36 +462,12 @@ Los Custom Scripts solo etiquetan elementos nuevos cuando se añaden. Para mante
 
 El repositorio incluye scripts de cron listos para usar:
 
-- `scripts/cron-radarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Radarr (en el host de Tagarr)
-- `scripts/cron-sonarr.sh` — Ejecuta `tag` + `clean` para toda la biblioteca de Sonarr (en el host de Tagarr)
-- `scripts/cron-radarr-hardlinks.sh` — Re-etiqueta, limpia y reconcilia hardlinks de Radarr (en el LXC de Radarr)
-- `scripts/cron-sonarr-hardlinks.sh` — Re-etiqueta, limpia y reconcilia hardlinks de Sonarr (en el LXC de Sonarr)
+- `scripts/cron-radarr.sh` — Cron para Radarr (ejecutar en el LXC de Radarr)
+- `scripts/cron-sonarr.sh` — Cron para Sonarr (ejecutar en el LXC de Sonarr)
 
-#### Scripts en el host de Tagarr (`cron-radarr.sh` / `cron-sonarr.sh`)
+#### Configuración
 
-Solo etiquetan y limpian. Útiles si no usas los Custom Scripts con hardlinks.
-
-Variable | Por defecto | Descripción
---- | --- | ---
-`TAGARR_VENV` | *(vacío)* | Ruta al virtualenv de Tagarr (dejar vacío si está instalado globalmente)
-`LOGFILE` | `~/.local/log/tagarr-cron-radarr.log` o `~/.local/log/tagarr-cron-sonarr.log` | Ruta al archivo de log
-
-```bash
-# En el host de Tagarr
-crontab -e
-
-# Radarr: cada día a las 3:00
-0 3 * * * TAGARR_VENV=/ruta/al/venv /ruta/a/scripts/cron-radarr.sh
-
-# Sonarr: cada día a las 4:00
-0 4 * * * TAGARR_VENV=/ruta/al/venv /ruta/a/scripts/cron-sonarr.sh
-```
-
-#### Scripts en el LXC (`cron-radarr-hardlinks.sh` / `cron-sonarr-hardlinks.sh`)
-
-Re-etiquetan, limpian y reconcilian hardlinks completos. Recomendados si usas hardlinks por proveedor.
-
-**`cron-radarr-hardlinks.sh`**
+**`cron-radarr.sh`**
 
 Variable | Por defecto | Descripción
 --- | --- | ---
@@ -503,7 +479,7 @@ Variable | Por defecto | Descripción
 `NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
 `LOGFILE` | `/var/log/tagarr-cron-hardlinks.log` | Ruta al archivo de log
 
-**`cron-sonarr-hardlinks.sh`**
+**`cron-sonarr.sh`**
 
 Variable | Por defecto | Descripción
 --- | --- | ---
@@ -515,38 +491,37 @@ Variable | Por defecto | Descripción
 `NOT_AVAILABLE_TAG` | `no-streaming` | Etiqueta a excluir de los hardlinks
 `LOGFILE` | `/var/log/tagarr-sonarr-hardlinks.log` | Ruta al archivo de log
 
+#### Instalación y uso
+
 Ambos scripts aceptan el flag `--hardlinks` para activar la reconciliación de hardlinks además del etiquetado:
 
 ```bash
 # Solo etiquetado (tag + clean via SSH)
-/usr/local/bin/cron-radarr-hardlinks.sh
+/usr/local/bin/cron-radarr.sh
 
 # Etiquetado + reconciliación de hardlinks
-/usr/local/bin/cron-radarr-hardlinks.sh --hardlinks
+/usr/local/bin/cron-radarr.sh --hardlinks
 ```
 
 ```bash
 # En el LXC de Radarr
 crontab -e
 # Etiquetado diario a las 3:00
-0 3 * * * /usr/local/bin/cron-radarr-hardlinks.sh
+0 3 * * * /usr/local/bin/cron-radarr.sh
 # Reconciliación de hardlinks semanal los domingos a las 5:00
-0 5 * * 0 /usr/local/bin/cron-radarr-hardlinks.sh --hardlinks
+0 5 * * 0 /usr/local/bin/cron-radarr.sh --hardlinks
 
 # En el LXC de Sonarr
 crontab -e
 # Etiquetado diario a las 4:00
-0 4 * * * /usr/local/bin/cron-sonarr-hardlinks.sh
+0 4 * * * /usr/local/bin/cron-sonarr.sh
 # Reconciliación de hardlinks semanal los domingos a las 6:00
-0 6 * * 0 /usr/local/bin/cron-sonarr-hardlinks.sh --hardlinks
+0 6 * * 0 /usr/local/bin/cron-sonarr.sh --hardlinks
 ```
 
 #### Verificación
 
 ```bash
-# En el host de Tagarr
-cat ~/.local/log/tagarr-cron-radarr.log
-
 # En el LXC de Radarr
 cat /var/log/tagarr-cron-hardlinks.log
 

@@ -48,7 +48,7 @@ log() {
     [ -n "$LOGFILE" ] && echo "[$(date)] $1" >> "$LOGFILE"
 }
 
-log "=== Inicio sincronización$([ "$HARDLINKS" = true ] && echo ' + hardlinks') ==="
+log "=== Inicio sincronización + NFO$([ "$HARDLINKS" = true ] && echo ' + hardlinks') ==="
 
 # 1. Re-etiquetar toda la biblioteca via SSH
 log "Re-etiquetando biblioteca..."
@@ -61,11 +61,6 @@ log "Limpiando tags obsoletos..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" \
     "$TAGARR_CMD sonarr clean" >> "${LOGFILE:-/dev/null}" 2>&1
 log "Clean exit code: $?"
-
-if [ "$HARDLINKS" = false ]; then
-    log "=== Sincronización completada ==="
-    exit 0
-fi
 
 # 3. Obtener todos los tags de Sonarr (id -> nombre)
 all_tags=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" "$SONARR_URL/api/v3/tag")
@@ -95,6 +90,33 @@ echo "$all_series" | jq -c '.[]' | while read -r series; do
     series_folder=$(basename "$series_path")
     streaming_base="$base_path/streaming"
 
+    # Construir lista de provider tags actuales
+    current_providers=()
+    for tag_id in $tag_ids; do
+        tag_name=$(echo "$all_tags" | jq -r ".[] | select(.id == $tag_id) | .label")
+        if [ -n "$tag_name" ] && [ "$tag_name" != "$NOT_AVAILABLE_TAG" ]; then
+            current_providers+=("$tag_name")
+        fi
+    done
+
+    # Actualizar tvshow.nfo con los providers actuales
+    if [ -d "$series_path" ]; then
+        {
+            echo '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'
+            echo '<tvshow>'
+            for provider in "${current_providers[@]}"; do
+                echo "  <tag>$provider</tag>"
+            done
+            echo '</tvshow>'
+        } > "$series_path/tvshow.nfo"
+        log "NFO actualizado: $series_path/tvshow.nfo"
+    fi
+
+    # Sin --hardlinks, no hace falta procesar episodios
+    if [ "$HARDLINKS" = false ]; then
+        continue
+    fi
+
     # Obtener archivos de episodios de esta serie
     episode_files=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" \
         "$SONARR_URL/api/v3/episodefile?seriesId=$series_id")
@@ -104,15 +126,6 @@ echo "$all_series" | jq -c '.[]' | while read -r series; do
     if [ "$ep_count" -eq 0 ]; then
         continue
     fi
-
-    # Construir lista de provider tags actuales
-    current_providers=()
-    for tag_id in $tag_ids; do
-        tag_name=$(echo "$all_tags" | jq -r ".[] | select(.id == $tag_id) | .label")
-        if [ -n "$tag_name" ] && [ "$tag_name" != "$NOT_AVAILABLE_TAG" ]; then
-            current_providers+=("$tag_name")
-        fi
-    done
 
     # Volcar rutas relativas a archivo temporal para iterar sin subshell adicional
     # relativePath es relativa a la carpeta de la serie, e.g.: Season 01/ep.mkv

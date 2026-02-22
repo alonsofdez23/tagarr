@@ -286,8 +286,8 @@ El script de Sonarr (`tagarr-sonarr.sh`) responde a los siguientes eventos:
 
 | Evento | Trigger en Sonarr | Acción |
 | --- | --- | --- |
-| `SeriesAdd` | On Series Add | Etiqueta la serie con sus proveedores de streaming |
-| `Download` | On Download | Re-etiqueta la serie y crea **hardlinks** en carpetas por proveedor |
+| `SeriesAdd` | On Series Add | Etiqueta la serie con sus proveedores de streaming y crea `tvshow.nfo` |
+| `Download` | On Download | Re-etiqueta la serie, actualiza `tvshow.nfo` y crea **hardlinks** en carpetas por proveedor |
 | `EpisodeFileDelete` | On Episode File Delete | Elimina el hardlink del episodio borrado en todas las carpetas de proveedor |
 | `SeriesDelete` | On Series Delete | Si se borraron los archivos, elimina la carpeta de la serie en todas las carpetas de proveedor |
 
@@ -328,6 +328,26 @@ Estructura para series (Sonarr):
 El script de Sonarr detecta automáticamente el tipo de carpeta raíz (`tvseries`, `anime`, etc.) a partir de la ruta de la serie, sin necesidad de configuración adicional. La ruta base (`/mnt/arrstack/`) se extrae automáticamente. Los hardlinks solo se crean si el contenido está disponible en al menos un proveedor — si solo tiene la etiqueta `not_available_tag` no se crea ningún hardlink.
 
 > **Nota:** Los hardlinks requieren que la carpeta `streaming/` esté en el mismo sistema de archivos que la biblioteca. Si Radarr/Sonarr escanea esa carpeta, añádela a la lista de carpetas excluidas en Settings > Media Management.
+
+##### tvshow.nfo
+
+El script de Sonarr crea y mantiene un archivo `tvshow.nfo` en la carpeta raíz de cada serie con los proveedores de streaming actuales:
+
+```xml
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<tvshow>
+  <tag>netflix</tag>
+  <tag>amazon-prime-video</tag>
+  <tag>skyshowtime</tag>
+</tvshow>
+```
+
+- Se **crea** en el evento `SeriesAdd` tras etiquetar la serie.
+- Se **sobreescribe** en el evento `Download` con los providers actualizados.
+- Si el archivo ya existe (con cualquier contenido), se reemplaza completamente.
+- La etiqueta `not_available_tag` (p. ej. `no-streaming`) se excluye del NFO.
+
+El cron `cron-sonarr.sh` también actualiza el NFO de todas las series en cada ejecución, independientemente de si se usa `--hardlinks` o no.
 
 #### Configuración
 
@@ -529,16 +549,27 @@ cat /var/log/tagarr-cron-hardlinks.log
 cat /var/log/tagarr-sonarr-hardlinks.log
 ```
 
-Ejemplo de salida del cron de hardlinks:
+Ejemplo de salida de `cron-sonarr.sh` (sin `--hardlinks`):
 
 ```
-[Mon Feb 17 05:00:01 UTC 2026] === Inicio sincronización de hardlinks ===
+[Mon Feb 17 05:00:01 UTC 2026] === Inicio sincronización + NFO ===
 [Mon Feb 17 05:00:01 UTC 2026] Re-etiquetando biblioteca...
 Successfully tagged 3 series in Sonarr!
 [Mon Feb 17 05:00:45 UTC 2026] Tagging exit code: 0
 [Mon Feb 17 05:00:45 UTC 2026] Limpiando tags obsoletos...
 [Mon Feb 17 05:00:50 UTC 2026] Clean exit code: 0
 [Mon Feb 17 05:00:50 UTC 2026] Procesando 42 series...
+[Mon Feb 17 05:01:10 UTC 2026] NFO actualizado: /mnt/arrstack/tvseries/Yellowstone (2018) [...]/tvshow.nfo
+[Mon Feb 17 05:01:10 UTC 2026] NFO actualizado: /mnt/arrstack/tvseries/Breaking Bad [...]/tvshow.nfo
+[Mon Feb 17 05:01:15 UTC 2026] === Sincronización completada ===
+```
+
+Ejemplo de salida con `--hardlinks`:
+
+```
+[Mon Feb 17 05:00:01 UTC 2026] === Inicio sincronización + NFO + hardlinks ===
+...
+[Mon Feb 17 05:01:10 UTC 2026] NFO actualizado: /mnt/arrstack/tvseries/Yellowstone (2018) [...]/tvshow.nfo
 [Mon Feb 17 05:01:12 UTC 2026] Hardlink añadido: /mnt/arrstack/streaming/netflix/tvseries/Yellowstone (2018) [...]/Season 02/S02E01.mkv
 [Mon Feb 17 05:01:15 UTC 2026] Hardlink obsoleto eliminado: /mnt/arrstack/streaming/skyshowtime/tvseries/Yellowstone (2018) [...]/Season 01/S01E01.mkv
 [Mon Feb 17 05:01:15 UTC 2026] === Sincronización completada ===

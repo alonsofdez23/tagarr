@@ -48,7 +48,7 @@ log() {
     [ -n "$LOGFILE" ] && echo "[$(date)] $1" >> "$LOGFILE"
 }
 
-log "=== Inicio sincronización$([ "$HARDLINKS" = true ] && echo ' + hardlinks') ==="
+log "=== Inicio sincronización + NFO$([ "$HARDLINKS" = true ] && echo ' + hardlinks') ==="
 
 # 1. Re-etiquetar toda la biblioteca via SSH
 log "Re-etiquetando biblioteca..."
@@ -62,11 +62,6 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" \
     "$TAGARR_CMD radarr clean" >> "${LOGFILE:-/dev/null}" 2>&1
 log "Clean exit code: $?"
 
-if [ "$HARDLINKS" = false ]; then
-    log "=== Sincronización completada ==="
-    exit 0
-fi
-
 # 3. Obtener todos los tags de Radarr (id -> nombre)
 all_tags=$(curl -s -H "X-Api-Key: $RADARR_API_KEY" "$RADARR_URL/api/v3/tag")
 
@@ -79,7 +74,7 @@ echo "$movies" | jq -c '.[]' | while read -r movie; do
     movie_path=$(echo "$movie" | jq -r '.path')
     movie_rel_path=$(echo "$movie" | jq -r '.movieFile.relativePath // empty')
 
-    # Saltar películas sin archivo descargado
+    # Saltar películas sin archivo descargado (sin archivo no hay NFO ni hardlinks)
     if [ -z "$movie_rel_path" ]; then
         continue
     fi
@@ -100,6 +95,23 @@ echo "$movies" | jq -c '.[]' | while read -r movie; do
             current_providers+=("$tag_name")
         fi
     done
+
+    # Actualizar NFO con los providers actuales
+    nfo_path="${movie_file%.*}.nfo"
+    {
+        echo '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'
+        echo '<movie>'
+        for provider in "${current_providers[@]}"; do
+            echo "  <tag>$provider</tag>"
+        done
+        echo '</movie>'
+    } > "$nfo_path"
+    log "NFO actualizado: $nfo_path"
+
+    # Sin --hardlinks, no hace falta procesar hardlinks
+    if [ "$HARDLINKS" = false ]; then
+        continue
+    fi
 
     # Añadir hardlinks faltantes
     for provider in "${current_providers[@]}"; do

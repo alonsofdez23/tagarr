@@ -34,6 +34,34 @@ log() {
     [ -n "$LOGFILE" ] && echo "[$(date)] $1" >> "$LOGFILE"
 }
 
+create_nfo() {
+    local movie_id="$1"
+    local file_path="$2"  # /mnt/arrstack/movies/Movie (2025) [...]/Movie.mkv
+
+    local nfo_path="${file_path%.*}.nfo"
+
+    local tag_ids
+    tag_ids=$(curl -s -H "X-Api-Key: $RADARR_API_KEY" "$RADARR_URL/api/v3/movie/$movie_id" \
+        | jq -r '.tags[]? // empty')
+
+    local all_tags
+    all_tags=$(curl -s -H "X-Api-Key: $RADARR_API_KEY" "$RADARR_URL/api/v3/tag")
+
+    {
+        echo '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'
+        echo '<movie>'
+        for tag_id in $tag_ids; do
+            local tag_name
+            tag_name=$(echo "$all_tags" | jq -r ".[] | select(.id == $tag_id) | .label")
+            [ -n "$tag_name" ] && [ "$tag_name" != "$NOT_AVAILABLE_TAG" ] && \
+                echo "  <tag>$tag_name</tag>"
+        done
+        echo '</movie>'
+    } > "$nfo_path"
+
+    log "NFO actualizado: $nfo_path"
+}
+
 create_hardlinks() {
     local movie_id="$1"
     local movie_path="$2"   # /mnt/arrstack/movies/Roofman (2025) [tmdbid-1242419]
@@ -150,7 +178,7 @@ case "$radarr_eventtype" in
         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$TAGARR_HOST" \
             "$TAGARR_CMD radarr tag --id $radarr_movie_id" >> "${LOGFILE:-/dev/null}" 2>&1
         log "Tagging exit code: $?"
-        # Crear hardlinks en carpetas de proveedor
+        create_nfo "$radarr_movie_id" "$radarr_moviefile_path"
         if [ "$ENABLE_HARDLINKS" = true ]; then
             create_hardlinks "$radarr_movie_id" "$radarr_movie_path" "$radarr_moviefile_path"
         fi

@@ -278,7 +278,7 @@ El script de Radarr (`tagarr-radarr.sh`) responde a los siguientes eventos:
 | Evento | Trigger en Radarr | Acción |
 | --- | --- | --- |
 | `MovieAdded` | On Movie Added | Etiqueta la película con sus proveedores de streaming |
-| `Download` | On Download | Re-etiqueta la película y crea **hardlinks** en carpetas por proveedor |
+| `Download` | On Download | Re-etiqueta la película, crea `{película}.nfo` y crea **hardlinks** en carpetas por proveedor |
 | `MovieFileDelete` | On Movie File Delete | Elimina el hardlink del archivo borrado en todas las carpetas de proveedor |
 | `MovieDelete` | On Movie Delete | Si se borraron los archivos, elimina la carpeta de la película en todas las carpetas de proveedor |
 
@@ -348,6 +348,32 @@ El script de Sonarr crea y mantiene un archivo `tvshow.nfo` en la carpeta raíz 
 - La etiqueta `not_available_tag` (p. ej. `no-streaming`) se excluye del NFO.
 
 El cron `cron-sonarr.sh` también actualiza el NFO de todas las series en cada ejecución, independientemente de si se usa `--hardlinks` o no.
+
+##### {película}.nfo
+
+El script de Radarr crea y mantiene un archivo NFO junto al archivo de vídeo de cada película, con el mismo nombre base que el vídeo:
+
+```
+/mnt/arrstack/movies/Oppenheimer (2023) [tmdbid-872585]/
+├── Oppenheimer (2023) [WEBDL-1080p][EAC3 5.1][h265].mkv
+└── Oppenheimer (2023) [WEBDL-1080p][EAC3 5.1][h265].nfo  ← mismo nombre
+```
+
+Contenido del NFO:
+
+```xml
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <tag>netflix</tag>
+  <tag>amazon-prime-video</tag>
+</movie>
+```
+
+- Se **crea** en el evento `Download` (en `MovieAdded` no hay archivo aún).
+- Se **sobreescribe** en cada `Download` posterior con los providers actualizados.
+- La etiqueta `not_available_tag` (p. ej. `no-streaming`) se excluye del NFO.
+
+El cron `cron-radarr.sh` también actualiza el NFO de todas las películas con archivo descargado en cada ejecución, independientemente de si se usa `--hardlinks` o no.
 
 #### Configuración
 
@@ -428,6 +454,7 @@ Ejemplo de salida para una película disponible en Netflix:
 [Thu Feb 19 16:09:12 CET 2026] Event: Download | Movie ID: 42 | File: /mnt/arrstack/movies/...
 Successfully tagged 1 movies in Radarr!
 [Thu Feb 19 16:09:13 CET 2026] Tagging exit code: 0
+[Thu Feb 19 16:09:13 CET 2026] NFO actualizado: /mnt/arrstack/movies/Película (2025) [...]/Película.nfo
 [Thu Feb 19 16:09:13 CET 2026] Hardlink creado: /mnt/arrstack/streaming/netflix/movies/Película (2025) [...]/Película.mkv
 ```
 
@@ -547,6 +574,21 @@ cat /var/log/tagarr-cron-hardlinks.log
 
 # En el LXC de Sonarr
 cat /var/log/tagarr-sonarr-hardlinks.log
+```
+
+Ejemplo de salida de `cron-radarr.sh` (sin `--hardlinks`):
+
+```
+[Mon Feb 17 03:00:01 UTC 2026] === Inicio sincronización + NFO ===
+[Mon Feb 17 03:00:01 UTC 2026] Re-etiquetando biblioteca...
+Successfully tagged 5 movies in Radarr!
+[Mon Feb 17 03:00:30 UTC 2026] Tagging exit code: 0
+[Mon Feb 17 03:00:30 UTC 2026] Limpiando tags obsoletos...
+[Mon Feb 17 03:00:35 UTC 2026] Clean exit code: 0
+[Mon Feb 17 03:00:35 UTC 2026] Procesando 120 películas...
+[Mon Feb 17 03:01:00 UTC 2026] NFO actualizado: /mnt/arrstack/movies/Oppenheimer (2023) [...]/Oppenheimer.nfo
+[Mon Feb 17 03:01:01 UTC 2026] NFO actualizado: /mnt/arrstack/movies/Dune (2021) [...]/Dune.nfo
+[Mon Feb 17 03:01:30 UTC 2026] === Sincronización completada ===
 ```
 
 Ejemplo de salida de `cron-sonarr.sh` (sin `--hardlinks`):
